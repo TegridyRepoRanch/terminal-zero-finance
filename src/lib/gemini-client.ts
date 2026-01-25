@@ -246,7 +246,7 @@ export async function extractSegmentsWithGemini(
   onProgress?.('Analyzing business segments with Gemini 2.5 Pro...');
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: SEGMENT_EXTRACTION_PROMPT + text }] }],
@@ -271,7 +271,7 @@ export async function analyzeMDAWithGemini(
   onProgress?.('Analyzing MD&A section with Gemini 2.5 Pro...');
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: MDA_ANALYSIS_PROMPT + text }] }],
@@ -296,7 +296,7 @@ export async function extractTablesWithGemini(
   onProgress?.('Extracting complex tables with Gemini 2.5 Pro...');
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: TABLE_EXTRACTION_PROMPT + text }] }],
@@ -361,7 +361,7 @@ export async function validateExtractionWithGemini(
   onProgress?.('Comparing extractions and resolving discrepancies...');
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
   const prompt = VALIDATION_PROMPT
     .replace('{extraction1}', JSON.stringify(gptExtraction.financials, null, 2))
@@ -454,7 +454,7 @@ Filing text:
 ` + text;
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: FULL_EXTRACTION_PROMPT }] }],

@@ -12,6 +12,7 @@ import {
   validateExtractionWithGemini,
 } from '../../lib/gemini-client';
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
+import { getOpenAIApiKey, getGeminiApiKey, hasGeminiKey } from '../../lib/api-config';
 import type { ExtractionMetadata, ExtractionWarning } from '../../lib/extraction-types';
 
 interface ProcessingScreenProps {
@@ -30,8 +31,6 @@ interface ProcessingStep {
 export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingScreenProps) {
   const {
     file,
-    apiKey,
-    geminiApiKey,
     extractionMode,
     setStatus,
     setProgress,
@@ -80,17 +79,31 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
   };
 
   useEffect(() => {
-    if (!file || !apiKey) {
-      setError('Missing file or API key');
+    if (!file) {
+      setError('No file selected');
+      onError();
+      return;
+    }
+
+    let apiKey: string;
+    let geminiApiKey: string | null = null;
+
+    try {
+      apiKey = getOpenAIApiKey();
+    } catch {
+      setError('OpenAI API key not configured');
       onError();
       return;
     }
 
     // Check for Gemini key if needed
-    if ((extractionMode === 'thorough' || extractionMode === 'validated') && !geminiApiKey) {
-      setError('Gemini API key required for this extraction mode');
-      onError();
-      return;
+    if (extractionMode === 'thorough' || extractionMode === 'validated') {
+      if (!hasGeminiKey()) {
+        setError('Gemini API key required for this extraction mode');
+        onError();
+        return;
+      }
+      geminiApiKey = getGeminiApiKey();
     }
 
     let cancelled = false;
@@ -331,7 +344,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
     return () => {
       cancelled = true;
     };
-  }, [file, apiKey, geminiApiKey, extractionMode]);
+  }, [file, extractionMode]);
 
   const getStepIcon = (step: ProcessingStep) => {
     const { status, model } = step;

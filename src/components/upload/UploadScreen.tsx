@@ -1,10 +1,10 @@
 // Upload Screen Component
 // Entry point for PDF upload flow
 
-import { FileText, ArrowRight, Key, Settings, Zap, Sparkles, Shield } from 'lucide-react';
+import { FileText, ArrowRight, Zap, Sparkles, Shield } from 'lucide-react';
 import { FileDropZone } from './FileDropZone';
-import { ApiKeyModal } from './ApiKeyModal';
 import { useUploadStore } from '../../store/useUploadStore';
+import { hasGeminiKey } from '../../lib/api-config';
 import type { ExtractionMode } from '../../store/useUploadStore';
 
 interface UploadScreenProps {
@@ -49,71 +49,16 @@ const EXTRACTION_MODES: Array<{
 export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
   const {
     setFile,
-    apiKey,
-    geminiApiKey,
-    setApiKey,
-    setGeminiApiKey,
-    showApiKeyModal,
-    setShowApiKeyModal,
     extractionMode,
     setExtractionMode,
   } = useUploadStore();
 
+  const geminiAvailable = hasGeminiKey();
+
   const handleFileSelect = (file: File) => {
-    if (!apiKey) {
-      setShowApiKeyModal(true);
-      setFile(file);
-      return;
-    }
-    // Check if Gemini key is needed for selected mode
-    if ((extractionMode === 'thorough' || extractionMode === 'validated') && !geminiApiKey) {
-      setShowApiKeyModal(true);
-      setFile(file);
-      return;
-    }
     setFile(file);
     onFileSelected();
   };
-
-  const handleOpenAIKeySave = (key: string) => {
-    setApiKey(key);
-    checkAndProceed();
-  };
-
-  const handleGeminiKeySave = (key: string) => {
-    setGeminiApiKey(key);
-    checkAndProceed();
-  };
-
-  const checkAndProceed = () => {
-    const state = useUploadStore.getState();
-    if (!state.file) return;
-
-    // Check if we have all required keys
-    const needsGemini = state.extractionMode === 'thorough' || state.extractionMode === 'validated';
-    if (state.apiKey && (!needsGemini || state.geminiApiKey)) {
-      onFileSelected();
-    }
-  };
-
-  const getKeyStatus = () => {
-    const hasOpenAI = !!apiKey;
-    const hasGemini = !!geminiApiKey;
-    const needsGemini = extractionMode !== 'fast';
-
-    if (hasOpenAI && (!needsGemini || hasGemini)) {
-      return { ready: true, message: 'Ready to extract' };
-    }
-    if (!hasOpenAI) {
-      return { ready: false, message: 'OpenAI key required' };
-    }
-    if (needsGemini && !hasGemini) {
-      return { ready: false, message: 'Gemini key required for this mode' };
-    }
-    return { ready: false, message: 'Configure API keys' };
-  };
-
-  const keyStatus = getKeyStatus();
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
@@ -124,22 +69,6 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
             <h1 className="text-xl font-bold text-zinc-100">Terminal Zero</h1>
             <p className="text-sm text-zinc-500">DCF Valuation Workstation</p>
           </div>
-          <button
-            onClick={() => setShowApiKeyModal(true)}
-            className="
-              flex items-center gap-2 px-3 py-2
-              text-sm text-zinc-400 hover:text-zinc-200
-              bg-zinc-900 rounded-md border border-zinc-800
-              hover:border-zinc-700 transition-colors
-            "
-          >
-            <Key className="w-4 h-4" />
-            <span>API Keys</span>
-            <div className="flex gap-1">
-              {apiKey && <span className="w-2 h-2 bg-emerald-500 rounded-full" />}
-              {geminiApiKey && <span className="w-2 h-2 bg-blue-500 rounded-full" />}
-            </div>
-          </button>
         </div>
       </header>
 
@@ -169,12 +98,12 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
               {EXTRACTION_MODES.map((mode) => {
                 const Icon = mode.icon;
                 const isSelected = extractionMode === mode.id;
-                const isDisabled = mode.requiresGemini && !geminiApiKey && !apiKey;
+                const isDisabled = mode.requiresGemini && !geminiAvailable;
 
                 return (
                   <button
                     key={mode.id}
-                    onClick={() => setExtractionMode(mode.id)}
+                    onClick={() => !isDisabled && setExtractionMode(mode.id)}
                     disabled={isDisabled}
                     className={`
                       relative p-4 rounded-lg border text-left transition-all
@@ -206,8 +135,8 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
                       </span>
                     </div>
                     <p className="text-xs text-zinc-500">{mode.description}</p>
-                    {mode.requiresGemini && !geminiApiKey && (
-                      <p className="text-xs text-amber-400 mt-1">Requires Gemini key</p>
+                    {mode.requiresGemini && !geminiAvailable && (
+                      <p className="text-xs text-amber-400 mt-1">Gemini not configured</p>
                     )}
                   </button>
                 );
@@ -221,24 +150,6 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
             accept=".pdf"
             maxSize={50 * 1024 * 1024}
           />
-
-          {/* API Key Warning */}
-          {!keyStatus.ready && (
-            <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-              <Settings className="w-5 h-5 text-amber-400 flex-shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm text-amber-200">
-                  {keyStatus.message}
-                </p>
-                <button
-                  onClick={() => setShowApiKeyModal(true)}
-                  className="text-sm text-amber-400 hover:text-amber-300 underline"
-                >
-                  Configure API keys
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Skip Option */}
           <div className="text-center pt-4">
@@ -267,7 +178,7 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-emerald-400">100%</div>
-              <div className="text-xs text-zinc-500">Client-Side Processing</div>
+              <div className="text-xs text-zinc-500">Automated Analysis</div>
             </div>
           </div>
         </div>
@@ -277,19 +188,9 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
       <footer className="px-6 py-4 border-t border-zinc-800">
         <div className="max-w-4xl mx-auto flex items-center justify-between text-xs text-zinc-600">
           <span>Terminal Zero v1.0</span>
-          <span>API keys are stored locally and never sent to our servers</span>
+          <span>Powered by GPT-4 & Gemini</span>
         </div>
       </footer>
-
-      {/* API Key Modal */}
-      <ApiKeyModal
-        isOpen={showApiKeyModal}
-        onClose={() => setShowApiKeyModal(false)}
-        onSaveOpenAI={handleOpenAIKeySave}
-        onSaveGemini={handleGeminiKeySave}
-        currentOpenAIKey={apiKey}
-        currentGeminiKey={geminiApiKey}
-      />
     </div>
   );
 }
