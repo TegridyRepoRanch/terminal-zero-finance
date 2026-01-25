@@ -74,6 +74,16 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
   const [steps, setSteps] = useState<ProcessingStep[]>(initialSteps);
   const [currentStepMessage, setCurrentStepMessage] = useState('');
   const [startTime] = useState(Date.now());
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Update elapsed time every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
 
   const updateStep = (stepId: string, status: ProcessingStep['status']) => {
     setSteps((prev) =>
@@ -324,8 +334,10 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       } catch (err) {
         if (cancelled) return;
 
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-        setError(errorMessage);
+        const errMsg = err instanceof Error ? err.message : 'Unknown error occurred';
+        console.error('[Processing] Error:', errMsg);
+        setError(errMsg);
+        setErrorMessage(errMsg);
 
         // Mark current step as error
         setSteps((prev) =>
@@ -334,7 +346,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           )
         );
 
-        onError();
+        // Don't call onError immediately - let user see the error and retry
       }
     };
 
@@ -456,19 +468,47 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           <div className="space-y-2">
             <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-500 ease-out ${extractionMode === 'fast'
-                  ? 'bg-cyan-500'
-                  : extractionMode === 'thorough'
-                    ? 'bg-blue-500'
-                    : 'bg-purple-500'
+                className={`h-full transition-all duration-500 ease-out ${errorMessage
+                  ? 'bg-red-500'
+                  : extractionMode === 'fast'
+                    ? 'bg-cyan-500'
+                    : extractionMode === 'thorough'
+                      ? 'bg-blue-500'
+                      : 'bg-purple-500'
                   }`}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <p className="text-sm text-zinc-400 text-center">
-              {currentStepMessage || 'Preparing...'}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-zinc-400">
+                {errorMessage ? 'Error occurred' : (currentStepMessage || 'Preparing...')}
+              </p>
+              <p className="text-xs text-zinc-500 font-mono">
+                {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}
+              </p>
+            </div>
           </div>
+
+          {/* Error Display */}
+          {errorMessage && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-400 mb-1">Processing Failed</p>
+                  <p className="text-xs text-red-300/80 mb-3">{errorMessage}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={onCancel}
+                      className="px-3 py-1.5 text-xs font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+                    >
+                      Go Back
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Steps */}
           <div className="space-y-3">

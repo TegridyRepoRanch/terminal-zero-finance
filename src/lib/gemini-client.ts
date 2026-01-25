@@ -95,6 +95,18 @@ function getGeminiClient(apiKey: string) {
 }
 
 /**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+    )
+  ]);
+}
+
+/**
  * Get display name for a model ID
  */
 function getModelDisplayName(modelId: string): string {
@@ -135,13 +147,17 @@ export async function extractSegmentsWithGemini(
   const model = genAI.getGenerativeModel({ model: modelId });
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: SEGMENT_EXTRACTION_PROMPT + text }] }],
-      generationConfig: {
-        temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
-        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
-      },
-    });
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: SEGMENT_EXTRACTION_PROMPT + text }] }],
+        generationConfig: {
+          temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+          responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
+        },
+      }),
+      120000, // 2 minute timeout
+      'Segment extraction'
+    );
 
     const response = result.response.text();
     return safeParseJSON<SegmentAnalysis>(response, 'segment extraction');
@@ -166,13 +182,17 @@ export async function analyzeMDAWithGemini(
   const model = genAI.getGenerativeModel({ model: modelId });
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: MDA_ANALYSIS_PROMPT + text }] }],
-      generationConfig: {
-        temperature: GEMINI_CONFIG.TEMPERATURE_ANALYSIS,
-        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
-      },
-    });
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: MDA_ANALYSIS_PROMPT + text }] }],
+        generationConfig: {
+          temperature: GEMINI_CONFIG.TEMPERATURE_ANALYSIS,
+          responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
+        },
+      }),
+      120000, // 2 minute timeout
+      'MD&A analysis'
+    );
 
     const response = result.response.text();
     return safeParseJSON<MDAanalysis>(response, 'MD&A analysis');
@@ -198,13 +218,17 @@ export async function extractTablesWithGemini(
 
   let response: string;
   try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: TABLE_EXTRACTION_PROMPT + text }] }],
-      generationConfig: {
-        temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
-        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
-      },
-    });
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: TABLE_EXTRACTION_PROMPT + text }] }],
+        generationConfig: {
+          temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+          responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
+        },
+      }),
+      120000, // 2 minute timeout
+      'Table extraction'
+    );
     response = result.response.text();
   } catch (error) {
     console.error('[Gemini] Table extraction API error:', error);
@@ -278,13 +302,17 @@ export async function validateExtractionWithGemini(
   );
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
-        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
-      },
-    });
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+          responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
+        },
+      }),
+      120000, // 2 minute timeout
+      'Validation'
+    );
 
     const response = result.response.text();
     return safeParseJSON<ValidationResult>(response, 'validation');
@@ -317,13 +345,17 @@ export async function extractFinancialsWithGemini(
   const model = genAI.getGenerativeModel({ model: modelId });
 
   try {
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: FINANCIAL_EXTRACTION_PROMPT + text }] }],
-      generationConfig: {
-        temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
-        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
-      },
-    });
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: FINANCIAL_EXTRACTION_PROMPT + text }] }],
+        generationConfig: {
+          temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+          responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
+        },
+      }),
+      120000, // 2 minute timeout
+      'Financial extraction'
+    );
 
     const response = result.response.text();
     console.log(`[Gemini] Response received, length: ${response.length}`);
