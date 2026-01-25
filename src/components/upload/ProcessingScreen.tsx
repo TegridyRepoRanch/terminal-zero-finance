@@ -75,26 +75,54 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
     }
 
     // Check for required API keys
+    console.log('[Processing] Checking API keys...');
+    console.log('[Processing] Gemini key present:', hasGeminiKey());
+    console.log('[Processing] Anthropic key present:', hasAnthropicKey());
+
     if (!hasGeminiKey()) {
-      setError('Gemini API key not configured. Add VITE_GEMINI_API_KEY to your environment.');
-      setErrorMessage('Gemini API key not configured. Add VITE_GEMINI_API_KEY to your environment.');
+      const msg = 'Gemini API key not configured. Add VITE_GEMINI_API_KEY to your environment.';
+      console.error('[Processing]', msg);
+      setError(msg);
+      setErrorMessage(msg);
+      setIsStarting(false);
       return;
     }
 
     if (!hasAnthropicKey()) {
-      setError('Anthropic API key not configured. Add VITE_ANTHROPIC_API_KEY to your environment.');
-      setErrorMessage('Anthropic API key not configured. Add VITE_ANTHROPIC_API_KEY to your environment.');
+      const msg = 'Anthropic API key not configured. Add VITE_ANTHROPIC_API_KEY to your environment.';
+      console.error('[Processing]', msg);
+      setError(msg);
+      setErrorMessage(msg);
+      setIsStarting(false);
       return;
     }
 
-    const geminiApiKey = getGeminiApiKey();
-    const anthropicApiKey = getAnthropicApiKey();
+    let geminiApiKey: string;
+    let anthropicApiKey: string;
+
+    try {
+      geminiApiKey = getGeminiApiKey();
+      anthropicApiKey = getAnthropicApiKey();
+      console.log('[Processing] API keys retrieved successfully');
+    } catch (keyError) {
+      const msg = `Failed to get API keys: ${keyError instanceof Error ? keyError.message : 'Unknown error'}`;
+      console.error('[Processing]', msg);
+      setError(msg);
+      setErrorMessage(msg);
+      setIsStarting(false);
+      return;
+    }
+
     let cancelled = false;
 
     const runExtraction = async () => {
+      console.log('[Processing] Starting extraction pipeline...');
+      console.log('[Processing] File:', file?.name, file?.size);
+
       try {
         // Signal that we've started
         setIsStarting(false);
+        setCurrentStepMessage('Starting extraction pipeline...');
 
         const totalSteps = steps.length;
         let currentStep = 0;
@@ -106,14 +134,22 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         };
 
         // Step 1: Parse PDF
+        console.log('[Processing] Step 1: Parsing PDF...');
         updateStep('parse', 'active');
         setStatus('parsing', 'Reading PDF...');
         setCurrentStepMessage('Reading PDF document...');
 
-        const parseResult = await extractTextFromPDF(file, (progress) => {
-          setProgress(progressForStep(progress.percent));
-          setCurrentStepMessage(`Reading page ${progress.currentPage} of ${progress.totalPages}...`);
-        });
+        let parseResult;
+        try {
+          parseResult = await extractTextFromPDF(file, (progress) => {
+            setProgress(progressForStep(progress.percent));
+            setCurrentStepMessage(`Reading page ${progress.currentPage} of ${progress.totalPages}...`);
+          });
+          console.log('[Processing] PDF parsed, text length:', parseResult.text.length);
+        } catch (parseError) {
+          console.error('[Processing] PDF parse error:', parseError);
+          throw new Error(`PDF parsing failed: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+        }
 
         if (cancelled) return;
 
@@ -123,18 +159,27 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
         // Truncate text for LLM if needed
         const truncatedText = truncateForLLM(parseResult.text, 100000);
+        console.log('[Processing] Truncated text length:', truncatedText.length);
 
         // Step 2: Gemini 3 Flash extraction
+        console.log('[Processing] Step 2: Gemini Flash extraction...');
         updateStep('flash', 'active');
         setStatus('extracting', 'Analyzing with Gemini 3 Flash...');
         setCurrentStepMessage('Running extraction pass 1 with Gemini 3 Flash (fast)...');
 
-        const flashResult = await extractFinancialsWithGemini(
-          truncatedText,
-          geminiApiKey,
-          (message) => setCurrentStepMessage(message),
-          true // useFlash = true
-        );
+        let flashResult;
+        try {
+          flashResult = await extractFinancialsWithGemini(
+            truncatedText,
+            geminiApiKey,
+            (message) => setCurrentStepMessage(message),
+            true // useFlash = true
+          );
+          console.log('[Processing] Gemini Flash extraction complete');
+        } catch (flashError) {
+          console.error('[Processing] Gemini Flash error:', flashError);
+          throw new Error(`Gemini Flash extraction failed: ${flashError instanceof Error ? flashError.message : 'Unknown error'}`);
+        }
 
         if (cancelled) return;
 
@@ -143,16 +188,24 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         setProgress(progressForStep(0));
 
         // Step 3: Gemini 3 Pro extraction
+        console.log('[Processing] Step 3: Gemini Pro extraction...');
         updateStep('pro', 'active');
         setStatus('extracting', 'Analyzing with Gemini 3 Pro...');
         setCurrentStepMessage('Running extraction pass 2 with Gemini 3 Pro (accurate)...');
 
-        const proResult = await extractFinancialsWithGemini(
-          truncatedText,
-          geminiApiKey,
-          (message) => setCurrentStepMessage(message),
-          false // useFlash = false (use Pro)
-        );
+        let proResult;
+        try {
+          proResult = await extractFinancialsWithGemini(
+            truncatedText,
+            geminiApiKey,
+            (message) => setCurrentStepMessage(message),
+            false // useFlash = false (use Pro)
+          );
+          console.log('[Processing] Gemini Pro extraction complete');
+        } catch (proError) {
+          console.error('[Processing] Gemini Pro error:', proError);
+          throw new Error(`Gemini Pro extraction failed: ${proError instanceof Error ? proError.message : 'Unknown error'}`);
+        }
 
         if (cancelled) return;
 
@@ -161,15 +214,23 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         setProgress(progressForStep(0));
 
         // Step 4: Claude Opus extraction
+        console.log('[Processing] Step 4: Claude Opus extraction...');
         updateStep('claude', 'active');
         setStatus('extracting', 'Analyzing with Claude Opus...');
         setCurrentStepMessage('Running extraction pass 3 with Claude Opus (best reasoning)...');
 
-        const claudeResult = await extractFinancialsWithClaude(
-          truncatedText,
-          anthropicApiKey,
-          (message) => setCurrentStepMessage(message)
-        );
+        let claudeResult;
+        try {
+          claudeResult = await extractFinancialsWithClaude(
+            truncatedText,
+            anthropicApiKey,
+            (message) => setCurrentStepMessage(message)
+          );
+          console.log('[Processing] Claude Opus extraction complete');
+        } catch (claudeError) {
+          console.error('[Processing] Claude Opus error:', claudeError);
+          throw new Error(`Claude Opus extraction failed: ${claudeError instanceof Error ? claudeError.message : 'Unknown error'}`);
+        }
 
         if (cancelled) return;
 
@@ -178,18 +239,26 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         setProgress(progressForStep(0));
 
         // Step 5: Final cross-model validation
+        console.log('[Processing] Step 5: Final validation...');
         updateStep('review', 'active');
         setStatus('extracting', 'Final validation...');
         setCurrentStepMessage('Comparing all extractions against source document...');
 
-        const finalResult = await performFinalReview(
-          flashResult,
-          proResult,
-          claudeResult,
-          truncatedText,
-          anthropicApiKey,
-          (message) => setCurrentStepMessage(message)
-        );
+        let finalResult;
+        try {
+          finalResult = await performFinalReview(
+            flashResult,
+            proResult,
+            claudeResult,
+            truncatedText,
+            anthropicApiKey,
+            (message) => setCurrentStepMessage(message)
+          );
+          console.log('[Processing] Final validation complete');
+        } catch (reviewError) {
+          console.error('[Processing] Final review error:', reviewError);
+          throw new Error(`Final validation failed: ${reviewError instanceof Error ? reviewError.message : 'Unknown error'}`);
+        }
 
         if (cancelled) return;
 
