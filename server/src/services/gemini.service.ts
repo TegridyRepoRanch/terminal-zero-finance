@@ -19,6 +19,14 @@ const GEMINI_CONFIG = {
 // Initialize client
 let genAI: GoogleGenerativeAI;
 
+/**
+ * Initializes the Google Generative AI client with API key from config.
+ *
+ * Must be called during server startup before any Gemini API calls.
+ * Throws an error if GEMINI_API_KEY environment variable is not set.
+ *
+ * @throws {Error} If Gemini API key is not configured
+ */
 export function initializeGeminiClient() {
   if (!config.geminiApiKey) {
     throw new Error('Gemini API key not configured');
@@ -28,7 +36,18 @@ export function initializeGeminiClient() {
 }
 
 /**
- * Wrap promise with timeout
+ * Wraps a promise with a timeout to prevent indefinite hanging.
+ *
+ * If the promise doesn't resolve within the specified timeout,
+ * rejects with an AppError (408 Request Timeout).
+ *
+ * @template T - The type of the promise result
+ * @param promise - The promise to wrap with timeout
+ * @param timeoutMs - Timeout duration in milliseconds
+ * @param operation - Human-readable operation name for error messages
+ * @returns Promise that resolves with the original result or rejects on timeout
+ *
+ * @throws {AppError} 408 error if timeout is reached
  */
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
   return Promise.race([
@@ -43,7 +62,17 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: strin
 }
 
 /**
- * Safe JSON parse
+ * Safely parses JSON response from Gemini API with error handling.
+ *
+ * Logs detailed error information including response preview if parsing fails.
+ * Throws AppError (500) with context-specific message on failure.
+ *
+ * @template T - The expected type of the parsed JSON
+ * @param response - Raw JSON string response from Gemini
+ * @param context - Operation context for error messages (e.g., "financial extraction")
+ * @returns Parsed JSON object of type T
+ *
+ * @throws {AppError} 500 error if JSON parsing fails
  */
 function safeParseJSON<T>(response: string, context: string): T {
   try {
@@ -56,7 +85,22 @@ function safeParseJSON<T>(response: string, context: string): T {
 }
 
 /**
- * Generate content with Gemini
+ * Generates content using the specified Gemini model with timeout protection.
+ *
+ * Core function for all Gemini API calls. Configures the model with:
+ * - User prompt as input
+ * - Specified temperature for response variation control
+ * - JSON response format
+ * - Timeout wrapper (default 120s from config)
+ *
+ * @param modelId - Gemini model identifier (e.g., 'gemini-3-flash-preview')
+ * @param prompt - The prompt to send to the model
+ * @param temperature - Temperature setting (0.0-1.0): lower = more deterministic
+ * @param operationName - Human-readable operation name for logging/errors
+ * @returns Raw text response from Gemini (typically JSON string)
+ *
+ * @throws {AppError} 500 if client not initialized or API call fails
+ * @throws {AppError} 408 if timeout is reached
  */
 async function generateContent(
   modelId: string,
@@ -96,7 +140,21 @@ async function generateContent(
 }
 
 /**
- * Extract financials from text
+ * Extracts financial data from SEC filing text using Gemini AI.
+ *
+ * Uses either Gemini Flash (faster, lower cost) or Gemini Pro (more accurate)
+ * depending on the useFlash parameter. Extraction uses low temperature (0.1)
+ * for deterministic, factual outputs.
+ *
+ * Expected to return structured financial data matching ExtractedFinancials schema.
+ *
+ * @param text - SEC filing text content (10-K, 10-Q, etc.)
+ * @param useFlash - True to use Flash model, false for Pro model
+ * @param prompt - Extraction prompt with JSON schema and instructions
+ * @returns Parsed JSON object containing extracted financial data
+ *
+ * @throws {AppError} 408 if extraction times out
+ * @throws {AppError} 500 if API call or JSON parsing fails
  */
 export async function extractFinancials(
   text: string,
@@ -117,7 +175,14 @@ export async function extractFinancials(
 }
 
 /**
- * Extract business segments
+ * Extracts business segment data from SEC filing text.
+ *
+ * Always uses Gemini Pro model with low temperature (0.1) for accuracy.
+ *
+ * @param text - SEC filing text content
+ * @param prompt - Segment extraction prompt with schema
+ * @returns Parsed JSON with segment analysis data
+ * @throws {AppError} On timeout or API failure
  */
 export async function extractSegments(text: string, prompt: string): Promise<unknown> {
   console.log('[Gemini] Extracting segments with Pro');
@@ -133,7 +198,15 @@ export async function extractSegments(text: string, prompt: string): Promise<unk
 }
 
 /**
- * Analyze MD&A section
+ * Analyzes Management Discussion & Analysis (MD&A) section of SEC filings.
+ *
+ * Uses Gemini Pro with medium temperature (0.3) to allow more interpretive analysis
+ * of qualitative information like business risks, opportunities, and management outlook.
+ *
+ * @param text - MD&A section text from filing
+ * @param prompt - Analysis prompt with desired output structure
+ * @returns Parsed JSON with key points, risks, and opportunities
+ * @throws {AppError} On timeout or API failure
  */
 export async function analyzeMDA(text: string, prompt: string): Promise<unknown> {
   console.log('[Gemini] Analyzing MD&A with Pro');
@@ -149,7 +222,15 @@ export async function analyzeMDA(text: string, prompt: string): Promise<unknown>
 }
 
 /**
- * Extract complex tables
+ * Extracts complex financial tables from filing text.
+ *
+ * Uses Gemini Pro with low temperature (0.1) for accurate table parsing.
+ * Handles multi-column tables with complex layouts.
+ *
+ * @param text - Text containing financial tables
+ * @param prompt - Table extraction prompt with desired format
+ * @returns Parsed JSON with structured table data
+ * @throws {AppError} On timeout or API failure
  */
 export async function extractTables(text: string, prompt: string): Promise<unknown> {
   console.log('[Gemini] Extracting tables with Pro');
@@ -165,7 +246,16 @@ export async function extractTables(text: string, prompt: string): Promise<unkno
 }
 
 /**
- * Validate extraction
+ * Validates extraction results for accuracy and completeness.
+ *
+ * Cross-checks extracted data against source document and flags
+ * inconsistencies, missing data, or potential errors.
+ *
+ * Uses Gemini Pro with low temperature (0.1) for factual validation.
+ *
+ * @param validationPrompt - Prompt containing extracted data and validation instructions
+ * @returns Parsed JSON with validation results and warnings
+ * @throws {AppError} On timeout or API failure
  */
 export async function validateExtraction(
   validationPrompt: string

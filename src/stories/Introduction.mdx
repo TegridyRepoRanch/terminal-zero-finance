@@ -1,0 +1,101 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Introduction" />
+
+# Terminal Zero Finance - Component Library
+
+Welcome to the Terminal Zero Finance Storybook!
+
+This is an interactive component library showcasing all the UI components used in the Terminal Zero Finance DCF Valuation Workstation.
+
+## What is Storybook?
+
+Storybook is a tool for developing UI components in isolation. It allows you to:
+
+- **Browse components** - View all available components in one place
+- **Test variations** - See different states and props for each component
+- **Document usage** - Learn how to use components with examples
+- **Develop in isolation** - Build components without running the full app
+
+## Getting Started
+
+### Running Storybook
+
+```bash
+npm run storybook
+```
+
+This will start Storybook on [http://localhost:6006](http://localhost:6006)
+
+### Building Storybook
+
+```bash
+npm run build:storybook
+```
+
+This creates a static version of Storybook for deployment.
+
+## Component Categories
+
+### UI Components
+Basic building blocks used throughout the application:
+- **Skeleton** - Loading placeholders for async content
+- **ThemeToggle** - Dark/light mode switcher
+- **ErrorBoundary** - Error handling wrapper
+- And more...
+
+### Charts
+Financial visualization components:
+- **CustomChartBuilder** - Dynamic chart creation
+- **TornadoChart** - Sensitivity analysis visualization
+- Interactive Recharts components
+
+### Analysis Tools
+Advanced financial analysis components:
+- **SensitivityTable** - What-if scenario analysis
+- **MonteCarloSimulation** - Probabilistic valuation
+- **ComparableCompanies** - Peer comparison
+- And more...
+
+### Data Entry
+Components for financial data input:
+- **ReviewScreen** - Extracted data review
+- **EditableField** - Inline editing with formatting
+- **UploadDropzone** - File upload interface
+
+## Documentation
+
+Each component includes:
+- **Description** - What the component does
+- **Props** - All available properties with types
+- **Stories** - Usage examples with different configurations
+- **Controls** - Interactive playground to test props
+
+## Design System
+
+Terminal Zero uses a dark-first design system:
+
+- **Colors**: Zinc palette for neutrals, Emerald for primary actions
+- **Typography**: Monospace fonts for financial data
+- **Spacing**: Consistent Tailwind spacing scale
+- **Animations**: Subtle transitions for better UX
+
+## Contributing
+
+When adding new components:
+
+1. Create the component in `src/components/`
+2. Add a `.stories.tsx` file with examples
+3. Document props with TypeScript interfaces
+4. Include usage examples and variations
+5. Test in Storybook before integration
+
+## Resources
+
+- [Storybook Documentation](https://storybook.js.org/docs)
+- [Project README](https://github.com/your-repo)
+- [API Documentation](/docs/api)
+
+---
+
+**Ready to explore?** Start browsing components in the sidebar! 🚀

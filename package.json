@@ -17,7 +17,17 @@
     "security:audit": "npm audit --audit-level=moderate",
     "security:audit:fix": "npm audit fix",
     "security:check": "npm run security:audit && cd server && npm run security:audit",
-    "security:fix": "npm audit fix && cd server && npm audit fix"
+    "security:fix": "npm audit fix && cd server && npm audit fix",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:all": "npm run test:run && npm run test:e2e",
+    "storybook": "storybook dev -p 6006",
+    "build:storybook": "storybook build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -31,28 +41,49 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
+    "react-is": "^19.2.3",
     "recharts": "^3.7.0",
     "tailwind-merge": "^3.4.0",
     "zustand": "^5.0.10"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.58.0",
+    "@storybook/addon-essentials": "^8.6.14",
+    "@storybook/addon-interactions": "^8.6.14",
+    "@storybook/addon-links": "^8.6.15",
+    "@storybook/blocks": "^8.6.14",
+    "@storybook/react": "^8.6.15",
+    "@storybook/react-vite": "^8.6.15",
     "@tailwindcss/vite": "^4.1.18",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "autoprefixer": "^10.4.23",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "happy-dom": "^20.3.9",
+    "jsdom": "^27.4.0",
     "postcss": "^8.5.6",
+    "storybook": "^8.6.15",
     "tailwindcss": "^3.4.19",
     "terser": "^5.46.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^5.4.21"
+    "vite": "^5.4.21",
+    "vitest": "^4.0.18"
+  },
+  "eslintConfig": {
+    "extends": [
+      "plugin:storybook/recommended"
+    ]
   }
 }

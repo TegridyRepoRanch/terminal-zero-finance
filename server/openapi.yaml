@@ -1,0 +1,565 @@
+openapi: 3.0.3
+info:
+  title: Terminal Zero Finance API
+  description: |
+    Secure backend API for Terminal Zero Finance - DCF Valuation Workstation
+
+    ## Features
+    - Secure API proxy for Gemini and Claude AI models
+    - Rate limiting (100 requests per 15 minutes)
+    - Input validation with Zod schemas
+    - CSRF protection (double-submit cookie)
+    - Response caching (100MB, 60min TTL)
+    - CORS with origin whitelisting
+
+    ## Authentication
+    All state-changing endpoints (POST, PUT, DELETE, PATCH) require CSRF token.
+    Fetch token from `/api/csrf-token` and include in `x-csrf-token` header.
+
+  version: 1.0.0
+  contact:
+    name: Terminal Zero Finance
+    url: https://github.com/your-username/terminal-zero-finance
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3001
+    description: Development server
+  - url: https://api.terminalzero.finance
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: CSRF
+    description: CSRF token management
+  - name: Cache
+    description: Cache management
+  - name: Extraction
+    description: Financial data extraction (Gemini API)
+  - name: Claude
+    description: Claude AI validation
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check if the API server is running
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  environment:
+                    type: string
+                    example: development
+
+  /api/csrf-token:
+    get:
+      summary: Get CSRF token
+      description: Fetch CSRF token for subsequent state-changing requests
+      tags:
+        - CSRF
+      responses:
+        '200':
+          description: CSRF token generated
+          headers:
+            Set-Cookie:
+              description: CSRF cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: CSRF token to include in x-csrf-token header
+                  success:
+                    type: boolean
+                    example: true
+
+  /api/cache/stats:
+    get:
+      summary: Get cache statistics
+      description: View current cache hit rate, size, and entries
+      tags:
+        - Cache
+      responses:
+        '200':
+          description: Cache statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  stats:
+                    type: object
+                    properties:
+                      hits:
+                        type: integer
+                        description: Number of cache hits
+                      misses:
+                        type: integer
+                        description: Number of cache misses
+                      evictions:
+                        type: integer
+                        description: Number of evicted entries
+                      size:
+                        type: integer
+                        description: Current cache size in bytes
+                      entries:
+                        type: integer
+                        description: Number of cached entries
+                      hitRate:
+                        type: string
+                        description: Hit rate percentage
+                        example: "78.95%"
+                      sizeMB:
+                        type: string
+                        description: Cache size in megabytes
+                        example: "42.15 MB"
+
+  /api/cache/clear:
+    post:
+      summary: Clear cache
+      description: Manually clear all cached responses
+      tags:
+        - Cache
+      security:
+        - csrfToken: []
+      responses:
+        '200':
+          description: Cache cleared successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Cache cleared successfully
+        '403':
+          $ref: '#/components/responses/CsrfError'
+
+  /api/extraction/financials:
+    post:
+      summary: Extract financial data
+      description: Extract financial statements from SEC filing text using Gemini AI
+      tags:
+        - Extraction
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - prompt
+              properties:
+                text:
+                  type: string
+                  description: SEC filing text content
+                  minLength: 10
+                  maxLength: 500000
+                prompt:
+                  type: string
+                  description: Extraction prompt for AI
+                  minLength: 10
+                useFlash:
+                  type: boolean
+                  description: Use Gemini Flash (faster) instead of Pro
+                  default: false
+      responses:
+        '200':
+          description: Financial data extracted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ExtractedFinancials'
+                  cached:
+                    type: boolean
+                    description: Whether response was served from cache
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/CsrfError'
+        '408':
+          $ref: '#/components/responses/TimeoutError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/extraction/segments:
+    post:
+      summary: Extract business segments
+      description: Analyze business segment data from filing
+      tags:
+        - Extraction
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - prompt
+              properties:
+                text:
+                  type: string
+                prompt:
+                  type: string
+      responses:
+        '200':
+          description: Segments extracted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SegmentAnalysis'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/CsrfError'
+
+  /api/extraction/mda:
+    post:
+      summary: Analyze MD&A section
+      description: Extract management discussion and analysis insights
+      tags:
+        - Extraction
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - prompt
+              properties:
+                text:
+                  type: string
+                prompt:
+                  type: string
+      responses:
+        '200':
+          description: MD&A analyzed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MDAAnalysis'
+
+  /api/extraction/tables:
+    post:
+      summary: Extract complex tables
+      description: Parse complex financial tables from filing
+      tags:
+        - Extraction
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - prompt
+              properties:
+                text:
+                  type: string
+                prompt:
+                  type: string
+      responses:
+        '200':
+          description: Tables extracted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+
+  /api/extraction/validate:
+    post:
+      summary: Validate extraction
+      description: Cross-validate extraction results
+      tags:
+        - Extraction
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - validationPrompt
+              properties:
+                validationPrompt:
+                  type: string
+      responses:
+        '200':
+          description: Validation complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ValidationResult'
+
+  /api/claude/financials:
+    post:
+      summary: Extract with Claude
+      description: Extract financial data using Claude Opus
+      tags:
+        - Claude
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - prompt
+              properties:
+                text:
+                  type: string
+                prompt:
+                  type: string
+      responses:
+        '200':
+          description: Data extracted with Claude
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ExtractedFinancials'
+
+  /api/claude/final-review:
+    post:
+      summary: Final cross-model validation
+      description: Perform final validation using Claude
+      tags:
+        - Claude
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - finalReviewPrompt
+              properties:
+                finalReviewPrompt:
+                  type: string
+      responses:
+        '200':
+          description: Final review complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+
+components:
+  securitySchemes:
+    csrfToken:
+      type: apiKey
+      in: header
+      name: x-csrf-token
+      description: CSRF token obtained from /api/csrf-token
+
+  schemas:
+    ExtractedFinancials:
+      type: object
+      properties:
+        companyName:
+          type: string
+        ticker:
+          type: string
+          nullable: true
+        filingType:
+          type: string
+          enum: [10-K, 10-Q, unknown]
+        fiscalYear:
+          type: integer
+        fiscalPeriod:
+          type: string
+        revenue:
+          type: number
+        costOfRevenue:
+          type: number
+        grossProfit:
+          type: number
+        operatingExpenses:
+          type: number
+        operatingIncome:
+          type: number
+        netIncome:
+          type: number
+        totalAssets:
+          type: number
+        totalLiabilities:
+          type: number
+        totalEquity:
+          type: number
+        totalDebt:
+          type: number
+        cashAndEquivalents:
+          type: number
+        sharesOutstandingDiluted:
+          type: number
+
+    SegmentAnalysis:
+      type: object
+      properties:
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              revenue:
+                type: number
+              profit:
+                type: number
+
+    MDAAnalysis:
+      type: object
+      properties:
+        keyPoints:
+          type: array
+          items:
+            type: string
+        risks:
+          type: array
+          items:
+            type: string
+        opportunities:
+          type: array
+          items:
+            type: string
+
+    ValidationResult:
+      type: object
+      properties:
+        isValid:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+              severity:
+                type: string
+                enum: [low, medium, high]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        status:
+          type: string
+          enum: [error]
+
+  responses:
+    ValidationError:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Validation failed: text must be at least 10 characters"
+            status: error
+
+    CsrfError:
+      description: CSRF token validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Invalid CSRF token. Please refresh the page and try again.
+              status:
+                type: string
+                example: error
+              code:
+                type: string
+                example: CSRF_VALIDATION_FAILED
+
+    TimeoutError:
+      description: Request timeout
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Request timeout after 120000ms"
+            status: error
+
+    RateLimitError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Too many requests from this IP, please try again later"
+            status: error
