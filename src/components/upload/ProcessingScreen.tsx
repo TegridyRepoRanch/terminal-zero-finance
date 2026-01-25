@@ -239,8 +239,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             const fields = ['revenue', 'netIncome', 'totalAssets', 'totalDebt'] as const;
 
             for (const field of fields) {
-              const original = (finalFinancials as Record<string, number>)[field];
-              const validated = (validationResult.financials as Record<string, number>)[field];
+              const original = (finalFinancials as unknown as Record<string, number>)[field];
+              const validated = (validationResult.financials as unknown as Record<string, number>)[field];
               if (original && validated && Math.abs(original - validated) / original > 0.01) {
                 discrepancies.push(`${field}: ${original.toLocaleString()} vs ${validated.toLocaleString()}`);
               }

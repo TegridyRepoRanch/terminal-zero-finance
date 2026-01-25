@@ -1,12 +1,11 @@
 // 10-K Upload and Extraction Component
 import { useState, useRef } from 'react';
 import { useFinanceStore } from '../store/useFinanceStore';
-import {
-    extractFinancialsFromPDF,
-    financialsToAssumptions,
-    isGeminiConfigured,
-} from '../lib/gemini-service';
-import type { ExtractedFinancials } from '../lib/gemini-service';
+import { extractFinancialsWithGemini } from '../lib/gemini-client';
+import { getGeminiApiKey, hasGeminiKey } from '../lib/api-config';
+import { calculateDerivedMetrics, mapToAssumptions } from '../lib/extraction-mapper';
+import type { ExtractedFinancials } from '../lib/extraction-types';
+import { extractTextFromPDF, truncateForLLM } from '../lib/pdf-parser';
 import { Upload, Loader2, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -23,7 +22,7 @@ export function TenKUpload() {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        if (!isGeminiConfigured()) {
+        if (!hasGeminiKey()) {
             setError('Gemini API key not configured. Add VITE_GEMINI_API_KEY to your .env file.');
             setStatus('error');
             return;
@@ -33,17 +32,26 @@ export function TenKUpload() {
             setStatus('uploading');
             setError(null);
 
-            // Small delay to show upload state
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Parse PDF
+            const parseResult = await extractTextFromPDF(file);
+            const truncatedText = truncateForLLM(parseResult.text, 100000);
 
             setStatus('extracting');
 
-            // Extract financials using Gemini
-            const financials = await extractFinancialsFromPDF(file);
+            // Extract financials using Gemini Flash (fast mode)
+            const result = await extractFinancialsWithGemini(
+                truncatedText,
+                getGeminiApiKey(),
+                (msg) => console.log(msg),
+                true // Use Flash for sidebar upload
+            );
+
+            const financials = result.financials;
             setExtractedData(financials);
 
-            // Auto-populate assumptions
-            const assumptions = financialsToAssumptions(financials);
+            // Calculate derived metrics and map to assumptions
+            const derivedMetrics = calculateDerivedMetrics(financials);
+            const assumptions = mapToAssumptions(financials, derivedMetrics);
 
             // Update store with extracted values
             if (assumptions.baseRevenue) updateAssumption('baseRevenue', assumptions.baseRevenue);
@@ -67,7 +75,7 @@ export function TenKUpload() {
         fileInputRef.current?.click();
     };
 
-    const geminiConfigured = isGeminiConfigured();
+    const geminiConfigured = hasGeminiKey();
 
     return (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
@@ -118,13 +126,13 @@ export function TenKUpload() {
                 {status === 'uploading' && (
                     <>
                         <Loader2 size={18} className="animate-spin" />
-                        <span className="text-sm">Uploading...</span>
+                        <span className="text-sm">Parsing PDF...</span>
                     </>
                 )}
                 {status === 'extracting' && (
                     <>
                         <Loader2 size={18} className="animate-spin" />
-                        <span className="text-sm">Gemini 2.5 Flash extracting data...</span>
+                        <span className="text-sm">Gemini 2.5 Flash extracting...</span>
                     </>
                 )}
                 {status === 'success' && (
@@ -152,25 +160,27 @@ export function TenKUpload() {
                         <div className="bg-zinc-800/50 rounded p-2">
                             <span className="text-zinc-500">Revenue</span>
                             <p className="text-emerald-400 font-mono">
-                                ${(extractedData.revenue / 1e9).toFixed(2)}B
+                                ${((extractedData.revenue || 0) / 1e9).toFixed(2)}B
                             </p>
                         </div>
                         <div className="bg-zinc-800/50 rounded p-2">
                             <span className="text-zinc-500">Net Income</span>
                             <p className="text-emerald-400 font-mono">
-                                ${(extractedData.netIncome / 1e9).toFixed(2)}B
+                                ${((extractedData.netIncome || 0) / 1e9).toFixed(2)}B
                             </p>
                         </div>
                         <div className="bg-zinc-800/50 rounded p-2">
                             <span className="text-zinc-500">Shares Out</span>
                             <p className="text-emerald-400 font-mono">
-                                {(extractedData.sharesOutstanding / 1e9).toFixed(2)}B
+                                {((extractedData.sharesOutstandingDiluted || 0) / 1e9).toFixed(2)}B
                             </p>
                         </div>
                         <div className="bg-zinc-800/50 rounded p-2">
                             <span className="text-zinc-500">Gross Margin</span>
                             <p className="text-emerald-400 font-mono">
-                                {((extractedData.grossMargin || 0) * 100).toFixed(1)}%
+                                {extractedData.grossProfit && extractedData.revenue
+                                    ? ((extractedData.grossProfit / extractedData.revenue) * 100).toFixed(1)
+                                    : '0.0'}%
                             </p>
                         </div>
                     </div>
