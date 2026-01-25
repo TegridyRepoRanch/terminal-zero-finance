@@ -1,23 +1,42 @@
 // Main App Component
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { useFinanceStore } from './store/useFinanceStore';
 import { useUploadStore } from './store/useUploadStore';
 import { Sidebar } from './components/Sidebar';
 import { TabNav } from './components/TabNav';
 import { TickerSearch, CompanyHeader } from './components/TickerSearch';
-import { IncomeStatement } from './components/IncomeStatement';
-import { BalanceSheet } from './components/BalanceSheet';
-import { CashFlowStatement } from './components/CashFlowStatement';
-import { DepreciationSchedule } from './components/DepreciationSchedule';
-import { DebtSchedule } from './components/DebtSchedule';
-import { ValuationEngine } from './components/ValuationEngine';
-import { UploadScreen, ProcessingScreen, ReviewScreen } from './components/upload';
 import { KeyboardShortcutsHelp, ThemeToggle } from './components/ui';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { AlertTriangle, X, Info } from 'lucide-react';
 import type { Assumptions } from './lib/financial-logic';
 import { validateConfig, getConfigMode } from './lib/api-config';
+import { fetchCsrfToken } from './lib/backend-client';
+
+// Lazy load heavy components
+const IncomeStatement = lazy(() => import('./components/IncomeStatement').then(m => ({ default: m.IncomeStatement })));
+const BalanceSheet = lazy(() => import('./components/BalanceSheet').then(m => ({ default: m.BalanceSheet })));
+const CashFlowStatement = lazy(() => import('./components/CashFlowStatement').then(m => ({ default: m.CashFlowStatement })));
+const DepreciationSchedule = lazy(() => import('./components/DepreciationSchedule').then(m => ({ default: m.DepreciationSchedule })));
+const DebtSchedule = lazy(() => import('./components/DebtSchedule').then(m => ({ default: m.DebtSchedule })));
+const ValuationEngine = lazy(() => import('./components/ValuationEngine').then(m => ({ default: m.ValuationEngine })));
+
+// Lazy load upload flow (includes PDF.js)
+const UploadScreen = lazy(() => import('./components/upload').then(m => ({ default: m.UploadScreen })));
+const ProcessingScreen = lazy(() => import('./components/upload').then(m => ({ default: m.ProcessingScreen })));
+const ReviewScreen = lazy(() => import('./components/upload').then(m => ({ default: m.ReviewScreen })));
+
+// Loading fallback component
+function ComponentLoader() {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+        <p className="text-sm text-zinc-500">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 // App view states
 type AppView = 'upload' | 'processing' | 'review' | 'model';
@@ -234,8 +253,10 @@ function MainContent() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6 bg-zinc-950">
-        {renderContent()}
+      <div id="main-content" className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-950" role="main">
+        <Suspense fallback={<ComponentLoader />}>
+          {renderContent()}
+        </Suspense>
       </div>
 
       {/* Footer */}
@@ -277,7 +298,7 @@ export default function App() {
   useEffect(() => {
     const mode = getConfigMode();
     if (mode === 'backend') {
-      fetchCsrfToken().catch((error) => {
+      fetchCsrfToken().catch((error: Error) => {
         console.error('[CSRF] Failed to fetch token on mount:', error);
       });
     }
@@ -363,6 +384,14 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300 dark:bg-zinc-950 dark:text-zinc-300">
+      {/* Skip to content link for keyboard accessibility */}
+      <a
+        href="#main-content"
+        className="skip-link"
+      >
+        Skip to main content
+      </a>
+
       {/* Toast Notifications */}
       <Toaster
         position="top-right"
@@ -395,7 +424,9 @@ export default function App() {
       {showConfigBanner && (
         <ConfigStatusBanner onDismiss={() => setShowConfigBanner(false)} />
       )}
-      {renderView()}
+      <Suspense fallback={<ComponentLoader />}>
+        {renderView()}
+      </Suspense>
     </div>
   );
 }
