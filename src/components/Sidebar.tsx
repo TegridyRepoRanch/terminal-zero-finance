@@ -1,7 +1,7 @@
 // Sidebar - Assumptions Input Panel
 import { useState } from 'react';
 import { useFinanceStore } from '../store/useFinanceStore';
-import { RefreshCw, TrendingUp, Building2, DollarSign, Calculator, Percent, AlertTriangle, Download, X, BarChart3 } from 'lucide-react';
+import { RefreshCw, TrendingUp, Building2, DollarSign, Calculator, Percent, AlertTriangle, Download, X } from 'lucide-react';
 
 interface InputFieldProps {
     label: string;
@@ -140,6 +140,8 @@ export function Sidebar() {
 
     const [showResetModal, setShowResetModal] = useState(false);
 
+    if (!assumptions) return null;
+
     // Export model data as JSON
     const handleExport = () => {
         const exportData = {
@@ -269,7 +271,7 @@ export function Sidebar() {
 
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto p-4">
-                <Section title="Market Data" icon={<BarChart3 size={14} />}>
+                <Section title="Market Data" icon={<TrendingUp size={14} />}>
                     <InputField
                         label="Share Price"
                         value={company?.marketPrice || 0}
