@@ -6,7 +6,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "security:audit": "npm audit --audit-level=moderate",
+    "security:audit:fix": "npm audit fix"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

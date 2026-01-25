@@ -1,0 +1,40 @@
+# Snyk (https://snyk.io) policy file
+# Manages Snyk vulnerability exceptions and configurations
+
+# Language settings
+language-settings:
+  javascript:
+    # Scan dev dependencies (important for build tools)
+    dev: true
+
+# Patch settings
+patch: {}
+
+# Ignore specific vulnerabilities (use sparingly and with justification)
+ignore: {}
+
+# Example of ignoring a vulnerability (uncomment and modify as needed):
+# ignore:
+#   'SNYK-JS-PACKAGE-123456':
+#     - '*':
+#         reason: 'Not exploitable in our use case - we sanitize all inputs'
+#         expires: '2026-03-01T00:00:00.000Z'
+
+# Fail thresholds
+failThreshold: high
+
+# Exclude paths from scanning
+exclude:
+  # Build outputs
+  - dist/
+  - build/
+  - server/dist/
+
+  # Dependencies
+  - node_modules/
+  - server/node_modules/
+
+  # Test files (adjust if you want to scan tests)
+  # - '**/*.test.ts'
+  # - '**/*.test.tsx'
+  # - '**/*.spec.ts'

@@ -1,221 +1,242 @@
-# Security Guidelines
+# Security Policy
 
-## ✅ Secure Backend API Implemented
+## Security Status
 
-**UPDATE:** A secure backend API proxy has been implemented to address the critical API key exposure issue. See [BACKEND_SETUP.md](BACKEND_SETUP.md) for setup instructions.
+✅ **Backend API Proxy**: API keys stored securely on server
+✅ **Rate Limiting**: 100 requests per 15 minutes
+✅ **Input Validation**: Zod schema validation on all endpoints
+✅ **Security Headers**: Helmet.js (CSP, HSTS, X-Frame-Options)
+✅ **CORS Protection**: Origin whitelisting
+✅ **CSRF Protection**: Double-submit cookie pattern
+✅ **Automated Scanning**: Snyk + npm audit + GitHub Security
 
-### Quick Start (Secure Mode)
+## Quick Start (Secure Mode)
+
 ```bash
 npm run setup          # Install all dependencies
 npm run dev:all        # Run frontend + backend
 ```
 
-## Migration Status
+See [BACKEND_SETUP.md](BACKEND_SETUP.md) for detailed setup instructions.
 
-The project now supports **two modes**:
+---
 
-1. **✅ Secure Mode (RECOMMENDED)**: Backend API proxy
-   - API keys stored securely on server
-   - Rate limiting and input validation
-   - CORS protection
-   - See [BACKEND_SETUP.md](BACKEND_SETUP.md)
+## Automated Security Scanning
 
-2. **⚠️ Legacy Mode (DEPRECATED)**: Direct API calls
-   - API keys exposed in frontend
-   - **Only for development/testing**
-   - **DO NOT use in production**
+### GitHub Actions Security Workflow
 
-## Previous Security Warning (Now Resolved)
+Our security workflow (`.github/workflows/security.yml`) runs automatically on:
+- Every push to `main` or `develop` branches
+- Every pull request to `main` or `develop`
+- Weekly schedule (Mondays at 9am UTC)
+- Manual trigger via GitHub Actions UI
 
-### Current Security Issues
+The workflow includes:
+- **Snyk Security Scan**: Checks dependencies for known vulnerabilities
+- **Snyk Code (SAST)**: Static application security testing
+- **NPM Audit**: Native npm vulnerability scanning
+- **Dependency Review**: Reviews new dependencies in pull requests
 
-#### 1. API Key Exposure (CRITICAL)
+### Snyk Integration
 
-**Problem:**
-- Gemini API key is stored in frontend environment variables (`VITE_GEMINI_API_KEY`)
-- The key is accessible in browser DevTools and network requests
-- Anyone can extract and abuse your API key, leading to:
-  - Unauthorized usage and costs
-  - API quota exhaustion
-  - Potential account suspension
+We use [Snyk](https://snyk.io) for comprehensive vulnerability scanning.
 
-**Impact:** HIGH - Your API key can be stolen and used by anyone
+**Setup Requirements:**
+1. Create a free Snyk account at https://snyk.io
+2. Generate a Snyk API token from your account settings
+3. Add the token to GitHub Secrets as `SNYK_TOKEN`
 
-**Immediate Action Required:**
-- ✅ For development/testing: Keep current setup but **NEVER deploy publicly**
-- ❌ For production: **DO NOT** deploy with client-side API keys
+**Configuration:**
+- Policy file: `.snyk`
+- Fail threshold: High severity
+- Scans both frontend and backend dependencies
+- Results uploaded to GitHub Security tab
 
-**Proper Solution:**
-Create a backend API proxy that:
-1. Stores API keys securely on the server
-2. Validates incoming requests
-3. Adds rate limiting
-4. Proxies requests to Gemini API
-5. Never exposes keys to the frontend
+### Manual Security Checks
 
-Example architecture:
-```
-Frontend → Your Backend API → Gemini API
-         (no key)         (key stored securely)
-```
+Run security scans locally:
 
-#### 2. No Authentication
+```bash
+# Check both frontend and backend for vulnerabilities
+npm run security:check
 
-**Problem:**
-- No user authentication or authorization
-- Anyone with the URL can use the application
-- No usage tracking or limits per user
+# Audit frontend only
+npm run security:audit
 
-**Impact:** MEDIUM - Anyone can use your API quota
+# Audit backend only
+cd server && npm run security:audit
 
-**Solution:**
-- Implement user authentication (OAuth, JWT, etc.)
-- Add per-user rate limiting
-- Track usage by user
+# Automatically fix vulnerabilities (use with caution)
+npm run security:fix
 
-#### 3. CORS Configuration
+# Fix frontend only
+npm run security:audit:fix
 
-**Problem:**
-- Direct browser → Gemini API calls require CORS
-- No protection against unauthorized origins
-
-**Impact:** LOW-MEDIUM - CORS helps but doesn't prevent key theft
-
-**Solution:**
-- Backend proxy eliminates CORS issues
-- Server-side origin validation
-
-### Recommended Security Architecture
-
-#### Development Environment
-Current setup is acceptable for local development only:
-- Use `.env.local` for API keys (never commit)
-- Keep `.env` files in `.gitignore`
-- Rotate keys regularly
-
-#### Production Environment
-**Required changes before deployment:**
-
-1. **Backend API Proxy** (Required)
-   ```
-   Frontend (React) → Backend (Node/Python/etc.) → Gemini API
-   ```
-
-2. **Environment Variables** (Server-side)
-   - Store API keys in server environment
-   - Use secrets management (AWS Secrets Manager, HashiCorp Vault, etc.)
-   - Never log API keys
-
-3. **Authentication** (Required)
-   - Implement user authentication
-   - Use secure session management
-   - Add JWT or session tokens
-
-4. **Rate Limiting** (Recommended)
-   - Limit requests per user
-   - Prevent abuse
-   - Protect your API quota
-
-5. **Input Validation** (Required)
-   - Validate all user inputs
-   - Sanitize file uploads
-   - Check file sizes and types
-
-6. **Monitoring** (Recommended)
-   - Log API usage
-   - Alert on anomalies
-   - Track costs
-
-### Example Backend Proxy (Node.js/Express)
-
-```typescript
-import express from 'express';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const app = express();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-
-// Middleware
-app.use(express.json());
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
-
-// Protected endpoint
-app.post('/api/extract', authenticateUser, async (req, res) => {
-  try {
-    const { text, useFlash } = req.body;
-
-    // Validate input
-    if (!text || text.length > 200000) {
-      return res.status(400).json({ error: 'Invalid input' });
-    }
-
-    // Call Gemini API (key never exposed)
-    const model = genAI.getGenerativeModel({
-      model: useFlash ? 'gemini-2.5-flash' : 'gemini-2.5-pro'
-    });
-
-    const result = await model.generateContent(text);
-
-    res.json({ data: result.response.text() });
-  } catch (error) {
-    console.error('Gemini API error:', error);
-    res.status(500).json({ error: 'Extraction failed' });
-  }
-});
-
-app.listen(3000);
+# Fix backend only
+cd server && npm run security:audit:fix
 ```
 
-### Frontend Changes for Backend Proxy
+---
 
-Replace direct Gemini API calls with backend requests:
+## Vulnerability Management
 
-```typescript
-// Before (INSECURE - current implementation)
-const genAI = new GoogleGenerativeAI(apiKey); // API key exposed!
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-const result = await model.generateContent(text);
+### Severity Levels
 
-// After (SECURE - backend proxy)
-const response = await fetch('/api/extract', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${userToken}` // JWT token, not API key
-  },
-  body: JSON.stringify({ text, useFlash: true })
-});
-const result = await response.json();
+- **Critical**: Immediate action required - patch within 24 hours
+- **High**: Urgent - patch within 7 days
+- **Moderate**: Important - patch within 30 days
+- **Low**: Monitor - address in next release cycle
+
+### Handling Vulnerabilities
+
+1. **Assess Impact**: Determine if the vulnerability affects our application
+2. **Update Dependencies**: Prefer updating to patched versions
+3. **Document Exceptions**: If a vulnerability cannot be fixed immediately:
+   - Add to `.snyk` ignore list with justification
+   - Set an expiration date for the exception
+   - Create a GitHub issue to track resolution
+
+Example Snyk exception:
+```yaml
+ignore:
+  'SNYK-JS-PACKAGE-123456':
+    - '*':
+        reason: 'Not exploitable - we sanitize all inputs before use'
+        expires: '2026-03-01T00:00:00.000Z'
 ```
 
-### Security Checklist Before Production
+---
 
-- [ ] Backend API proxy implemented
-- [ ] API keys moved to server-side environment
+## Security Best Practices
+
+### Dependencies
+
+- ✅ Regularly update dependencies (at least monthly)
+- ✅ Review dependency changes in pull requests
+- ✅ Avoid dependencies with known security issues
+- ✅ Minimize total number of dependencies
+- ✅ Use exact versions in production (`package-lock.json`)
+
+### Code Security
+
+- ✅ All user inputs are validated with Zod schemas
+- ✅ CSRF protection on all state-changing endpoints
+- ✅ Rate limiting on all API endpoints (100 req/15min)
+- ✅ Security headers (CSP, HSTS, X-Frame-Options)
+- ✅ API keys stored server-side only
+- ✅ No sensitive data in frontend code or environment variables
+
+### API Security
+
+- ✅ Backend proxy for all external API calls
+- ✅ Input validation on all endpoints (Zod schemas)
+- ✅ Rate limiting: 100 requests per 15 minutes
+- ✅ CORS restricted to allowed origins
+- ✅ Request size limits (500KB max)
+- ✅ Timeout enforcement (2 minutes for Gemini API)
+- ✅ CSRF protection (double-submit cookie)
+
+---
+
+## Deployment Modes
+
+### 1. Secure Mode (RECOMMENDED)
+
+Backend API proxy with server-side API keys:
+
+**Features:**
+- ✅ API keys stored securely on server
+- ✅ Rate limiting and input validation
+- ✅ CORS and CSRF protection
+- ✅ Security headers
+
+**Setup:**
+See [BACKEND_SETUP.md](BACKEND_SETUP.md)
+
+### 2. Legacy Mode (DEPRECATED)
+
+Direct API calls from frontend:
+
+**⚠️ WARNING:**
+- API keys exposed in browser
+- **Only for development/testing**
+- **DO NOT use in production**
+- No rate limiting or validation
+
+---
+
+## Security Checklist
+
+### Before Production Deployment
+
+- [x] Backend API proxy implemented
+- [x] API keys moved to server-side environment
+- [x] Rate limiting added (100 req/15min)
+- [x] Input validation on all endpoints (Zod)
+- [x] Security headers configured (Helmet.js)
+- [x] CORS configured with origin whitelist
+- [x] CSRF protection implemented
 - [ ] User authentication implemented
-- [ ] Rate limiting added
-- [ ] Input validation on all endpoints
 - [ ] HTTPS enabled (SSL certificate)
-- [ ] Security headers configured (CSP, HSTS, etc.)
-- [ ] Error messages don't leak sensitive info
-- [ ] API keys rotated from development
-- [ ] Security audit performed
+- [ ] Secrets management (AWS Secrets Manager, etc.)
 - [ ] Monitoring and alerting set up
+- [ ] Security audit performed
+- [ ] API keys rotated from development
+- [ ] Dependency vulnerability scan passed
 
-### Reporting Security Issues
+### For Contributors
 
-If you discover a security vulnerability, please email security@yourdomain.com
+Before submitting a pull request:
 
-**Do not:**
-- Open a public GitHub issue
-- Share details publicly before fix is deployed
+- [ ] Run `npm run security:check` and address any issues
+- [ ] No sensitive data (API keys, credentials) in code or commits
+- [ ] All user inputs validated and sanitized
+- [ ] No new dependencies with known vulnerabilities
+- [ ] Security headers maintained
+- [ ] CSRF protection maintained for state-changing routes
 
-### Additional Resources
+---
+
+## Reporting Security Issues
+
+**DO NOT** open public GitHub issues for security vulnerabilities.
+
+Instead:
+1. Email security concerns to the project maintainers
+2. Include detailed steps to reproduce
+3. Allow time for a fix before public disclosure
+
+We will:
+- Acknowledge your report within 48 hours
+- Provide regular updates on fix progress
+- Credit you in the security advisory (unless you prefer anonymity)
+
+---
+
+## Security Tooling
+
+| Tool | Purpose | Frequency |
+|------|---------|-----------|
+| Snyk | Dependency & SAST scanning | On push, PR, weekly |
+| npm audit | Dependency vulnerability check | On push, PR |
+| Dependency Review | PR dependency analysis | On PR |
+| GitHub Security | Centralized security alerts | Continuous |
+| Helmet.js | Security headers | Every request |
+| express-rate-limit | Rate limiting | Every request |
+| Zod | Input validation | Every API call |
+| csrf-csrf | CSRF protection | State-changing requests |
+
+---
+
+## Additional Resources
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [Snyk Documentation](https://docs.snyk.io/)
+- [npm audit Documentation](https://docs.npmjs.com/cli/v10/commands/npm-audit)
+- [GitHub Security Features](https://docs.github.com/en/code-security)
 - [Google Cloud Security Best Practices](https://cloud.google.com/security/best-practices)
 - [API Security Checklist](https://github.com/shieldfy/API-Security-Checklist)
 
 ---
 
-**Remember:** The current implementation is for development/demo purposes only. Never deploy to production without addressing the API key exposure issue.
+**Last Updated**: 2026-01-26

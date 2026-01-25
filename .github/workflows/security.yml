@@ -1,0 +1,124 @@
+# Security Scanning Workflow
+# Runs Snyk vulnerability scans on dependencies and code
+name: Security Scan
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run weekly on Mondays at 9am UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  snyk:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write # For uploading results to GitHub Security tab
+
+    strategy:
+      matrix:
+        directory:
+          - name: 'Frontend'
+            path: '.'
+          - name: 'Backend'
+            path: './server'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies - ${{ matrix.directory.name }}
+        working-directory: ${{ matrix.directory.path }}
+        run: npm ci
+
+      - name: Run Snyk to check for vulnerabilities - ${{ matrix.directory.name }}
+        uses: snyk/actions/node@master
+        continue-on-error: true # Don't fail the build on vulnerabilities
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --all-projects
+          command: test
+          working-directory: ${{ matrix.directory.path }}
+
+      - name: Run Snyk Code (SAST) - ${{ matrix.directory.name }}
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+          command: code test
+          working-directory: ${{ matrix.directory.path }}
+
+      - name: Upload Snyk results to GitHub Security tab - ${{ matrix.directory.name }}
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: snyk.sarif
+          category: snyk-${{ matrix.directory.name }}
+
+  npm-audit:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        directory:
+          - name: 'Frontend'
+            path: '.'
+          - name: 'Backend'
+            path: './server'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Run npm audit - ${{ matrix.directory.name }}
+        working-directory: ${{ matrix.directory.path }}
+        run: |
+          echo "Running npm audit for ${{ matrix.directory.name }}..."
+          npm audit --audit-level=moderate || true
+          echo "Generating detailed audit report..."
+          npm audit --json > audit-report.json || true
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-${{ matrix.directory.name }}
+          path: ${{ matrix.directory.path }}/audit-report.json
+          retention-days: 30
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-3.0, AGPL-3.0
