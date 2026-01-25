@@ -1,5 +1,5 @@
 // Main App Component
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFinanceStore } from './store/useFinanceStore';
 import { useUploadStore } from './store/useUploadStore';
 import { Sidebar } from './components/Sidebar';
@@ -12,43 +12,167 @@ import { DepreciationSchedule } from './components/DepreciationSchedule';
 import { DebtSchedule } from './components/DebtSchedule';
 import { ValuationEngine } from './components/ValuationEngine';
 import { UploadScreen, ProcessingScreen, ReviewScreen } from './components/upload';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, X, Info } from 'lucide-react';
 import type { Assumptions } from './lib/financial-logic';
+import { validateConfig, getConfigMode } from './lib/api-config';
 
 // App view states
 type AppView = 'upload' | 'processing' | 'review' | 'model';
 
-// Security Warning Banner - shows in development mode
-function SecurityBanner({ onDismiss }: { onDismiss: () => void }) {
+// Configuration Status Banner - shows validation warnings and mode info
+function ConfigStatusBanner({ onDismiss }: { onDismiss: () => void }) {
   const isDev = import.meta.env.DEV;
+  const validation = validateConfig();
+  const mode = getConfigMode();
 
-  if (!isDev) return null;
+  // Don't show anything in production backend mode (all good)
+  if (!isDev && mode === 'backend') return null;
+
+  // Don't show anything if we're in backend mode in dev (user is doing it right)
+  if (isDev && mode === 'backend' && validation.warnings.length === 0) {
+    return null;
+  }
+
+  // Determine banner style based on mode and validation
+  let bgColor = 'bg-zinc-800/50 border-zinc-700';
+  let textColor = 'text-zinc-400';
+  let iconColor = 'text-zinc-400';
+  let Icon = Info;
+  let title = 'Info';
+
+  if (mode === 'legacy') {
+    bgColor = 'bg-amber-500/10 border-amber-500/30';
+    textColor = 'text-amber-300';
+    iconColor = 'text-amber-400';
+    Icon = AlertTriangle;
+    title = 'Security Warning';
+  } else if (validation.warnings.length > 0) {
+    bgColor = 'bg-blue-500/10 border-blue-500/30';
+    textColor = 'text-blue-300';
+    iconColor = 'text-blue-400';
+    Icon = Info;
+    title = 'Configuration Notice';
+  }
+
+  // Build message based on mode
+  let message = '';
+  if (mode === 'legacy') {
+    message = 'Running in LEGACY mode - API keys exposed in browser. Switch to backend mode for production.';
+  } else if (mode === 'backend' && validation.warnings.length > 0) {
+    message = validation.warnings[0]; // Show first warning
+  }
+
+  if (!message) return null;
 
   return (
-    <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2">
+    <div className={`border-b ${bgColor} px-4 py-2`}>
       <div className="flex items-center justify-between max-w-6xl mx-auto">
         <div className="flex items-center gap-3">
-          <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-          <p className="text-xs text-amber-300">
-            <span className="font-semibold">Development Mode:</span> API keys are exposed in the browser.
-            For production, use a backend proxy to secure your keys.
-            <a
-              href="https://github.com/TegridyRepoRanch/terminal-zero-finance#security"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-2 underline hover:text-amber-200"
-            >
-              Learn more
-            </a>
+          <Icon className={`w-4 h-4 ${iconColor} flex-shrink-0`} />
+          <p className={`text-xs ${textColor}`}>
+            <span className="font-semibold">{title}:</span> {message}
+            {mode === 'legacy' && (
+              <a
+                href="/BACKEND_SETUP.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 underline hover:opacity-80"
+              >
+                Setup Backend
+              </a>
+            )}
+            {validation.warnings.length > 1 && (
+              <span className="ml-2 opacity-75">
+                (+{validation.warnings.length - 1} more)
+              </span>
+            )}
           </p>
         </div>
         <button
           onClick={onDismiss}
-          className="p-1 text-amber-400 hover:text-amber-200 transition-colors"
-          aria-label="Dismiss warning"
+          className={`p-1 ${iconColor} hover:opacity-80 transition-opacity`}
+          aria-label="Dismiss notice"
         >
           <X size={14} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Configuration Error Screen - shows when config is invalid
+function ConfigErrorScreen({ validation }: { validation: ReturnType<typeof validateConfig> }) {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-zinc-950 text-zinc-300 p-8">
+      <div className="max-w-2xl w-full bg-zinc-900 border border-red-500/30 rounded-lg p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <AlertTriangle className="w-8 h-8 text-red-400" />
+          <h1 className="text-2xl font-bold text-red-400">Configuration Error</h1>
+        </div>
+
+        <div className="space-y-4 mb-6">
+          <p className="text-zinc-300">
+            The application cannot start due to missing or invalid configuration.
+          </p>
+
+          <div className="bg-zinc-950 border border-red-500/20 rounded p-4">
+            <h2 className="font-semibold text-red-400 mb-2">Errors:</h2>
+            <ul className="list-disc list-inside space-y-1 text-sm">
+              {validation.errors.map((error, i) => (
+                <li key={i} className="text-zinc-400">{error}</li>
+              ))}
+            </ul>
+          </div>
+
+          {validation.warnings.length > 0 && (
+            <div className="bg-zinc-950 border border-amber-500/20 rounded p-4">
+              <h2 className="font-semibold text-amber-400 mb-2">Warnings:</h2>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                {validation.warnings.map((warning, i) => (
+                  <li key={i} className="text-zinc-400">{warning}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-zinc-950 border border-zinc-800 rounded p-4 space-y-3">
+          <h2 className="font-semibold text-zinc-100">Quick Setup:</h2>
+          <div className="space-y-2 text-sm">
+            <p className="text-zinc-400"><span className="font-semibold">Option 1 (Recommended):</span> Backend Mode</p>
+            <ol className="list-decimal list-inside space-y-1 text-zinc-500 ml-4">
+              <li>Copy <code className="text-cyan-400">.env.example</code> to <code className="text-cyan-400">.env</code></li>
+              <li>Set <code className="text-cyan-400">VITE_BACKEND_URL=http://localhost:3001</code></li>
+              <li>Follow <a href="/BACKEND_SETUP.md" className="text-cyan-400 underline">BACKEND_SETUP.md</a> to start the backend</li>
+              <li>Reload this page</li>
+            </ol>
+
+            <p className="text-zinc-400 mt-4"><span className="font-semibold">Option 2 (Development Only):</span> Legacy Mode</p>
+            <ol className="list-decimal list-inside space-y-1 text-zinc-500 ml-4">
+              <li>Copy <code className="text-cyan-400">.env.example</code> to <code className="text-cyan-400">.env</code></li>
+              <li>Add your API keys: <code className="text-cyan-400">VITE_GEMINI_API_KEY</code> and <code className="text-cyan-400">VITE_ANTHROPIC_API_KEY</code></li>
+              <li>Reload this page</li>
+              <li className="text-amber-400">⚠️ WARNING: This exposes API keys in the browser</li>
+            </ol>
+          </div>
+        </div>
+
+        <div className="mt-6 flex gap-3">
+          <a
+            href="/BACKEND_SETUP.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-center rounded transition-colors"
+          >
+            View Setup Guide
+          </a>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded transition-colors"
+          >
+            Reload Page
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -116,9 +240,26 @@ function MainContent() {
 
 export default function App() {
   const [view, setView] = useState<AppView>('upload');
-  const [showSecurityBanner, setShowSecurityBanner] = useState(true);
+  const [showConfigBanner, setShowConfigBanner] = useState(true);
+  const [configValidation, setConfigValidation] = useState(() => validateConfig());
   const { setAssumptionsFromExtraction } = useFinanceStore();
   const { metadata, reset: resetUpload } = useUploadStore();
+
+  // Validate configuration on mount
+  useEffect(() => {
+    const validation = validateConfig();
+    setConfigValidation(validation);
+
+    // Log configuration status to console
+    if (validation.isValid) {
+      console.log(`✅ Configuration valid - Running in ${validation.mode.toUpperCase()} mode`);
+      if (validation.warnings.length > 0) {
+        console.warn('⚠️ Configuration warnings:', validation.warnings);
+      }
+    } else {
+      console.error('❌ Configuration errors:', validation.errors);
+    }
+  }, []);
 
   const handleFileSelected = () => {
     setView('processing');
@@ -193,10 +334,15 @@ export default function App() {
     }
   };
 
+  // Show error screen if configuration is invalid
+  if (!configValidation.isValid) {
+    return <ConfigErrorScreen validation={configValidation} />;
+  }
+
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300">
-      {showSecurityBanner && (
-        <SecurityBanner onDismiss={() => setShowSecurityBanner(false)} />
+      {showConfigBanner && (
+        <ConfigStatusBanner onDismiss={() => setShowConfigBanner(false)} />
       )}
       {renderView()}
     </div>
