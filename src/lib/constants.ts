@@ -10,11 +10,25 @@ export const GEMINI_MODELS = {
   FLASH: 'gemini-3-flash-preview',
 } as const;
 
+export const ANTHROPIC_MODELS = {
+  OPUS: 'claude-opus-4-5-20251101',
+  SONNET: 'claude-sonnet-4-20250514',
+} as const;
+
+export const MODEL_CONFIG = {
+  TEMPERATURE_EXTRACTION: 0.1,
+  TEMPERATURE_ANALYSIS: 0.2,
+  TEMPERATURE_REVIEW: 0.0, // Deterministic for final review
+  MAX_TEXT_LENGTH: 100000, // Characters to send to LLM
+  TIMEOUT_MS: 180000, // 3 minute timeout per call
+} as const;
+
+// Legacy - keeping for backwards compatibility
 export const GEMINI_CONFIG = {
   TEMPERATURE_EXTRACTION: 0.1,
   TEMPERATURE_ANALYSIS: 0.2,
   RESPONSE_MIME_TYPE: 'application/json',
-  MAX_TEXT_LENGTH: 100000, // Characters to send to LLM
+  MAX_TEXT_LENGTH: 100000,
 } as const;
 
 // =============================================================================

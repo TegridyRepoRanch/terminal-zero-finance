@@ -1,17 +1,14 @@
-// Processing Screen Component - Gemini Only
-// Shows progress during PDF extraction with Gemini 3 Flash/Pro
+// Processing Screen Component - Multi-Model Validated Extraction
+// 4-step pipeline: Gemini Flash -> Gemini Pro -> Claude Opus -> Final Review
 
-import { useEffect, useState, useMemo } from 'react';
-import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Shield } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Brain, Shield } from 'lucide-react';
 import { useUploadStore } from '../../store/useUploadStore';
 import { extractTextFromPDF, truncateForLLM } from '../../lib/pdf-parser';
-import {
-  extractFinancialsWithGemini,
-  extractSegmentsWithGemini,
-  analyzeMDAWithGemini,
-} from '../../lib/gemini-client';
+import { extractFinancialsWithGemini } from '../../lib/gemini-client';
+import { extractFinancialsWithClaude, performFinalReview } from '../../lib/anthropic-client';
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
-import { getGeminiApiKey, hasGeminiKey } from '../../lib/api-config';
+import { getGeminiApiKey, getAnthropicApiKey, hasGeminiKey, hasAnthropicKey } from '../../lib/api-config';
 import type { ExtractionMetadata, ExtractionWarning } from '../../lib/extraction-types';
 
 interface ProcessingScreenProps {
@@ -24,13 +21,21 @@ interface ProcessingStep {
   id: string;
   label: string;
   status: 'pending' | 'active' | 'complete' | 'error';
-  model?: 'flash' | 'pro';
+  icon: 'flash' | 'pro' | 'claude' | 'review' | 'parse' | 'map';
 }
+
+const STEPS: ProcessingStep[] = [
+  { id: 'parse', label: 'Parsing PDF document', status: 'pending', icon: 'parse' },
+  { id: 'flash', label: 'Extraction pass 1 (Gemini 3 Flash)', status: 'pending', icon: 'flash' },
+  { id: 'pro', label: 'Extraction pass 2 (Gemini 3 Pro)', status: 'pending', icon: 'pro' },
+  { id: 'claude', label: 'Extraction pass 3 (Claude Opus)', status: 'pending', icon: 'claude' },
+  { id: 'review', label: 'Final validation (Claude Opus)', status: 'pending', icon: 'review' },
+  { id: 'map', label: 'Processing results', status: 'pending', icon: 'map' },
+];
 
 export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingScreenProps) {
   const {
     file,
-    extractionMode,
     setStatus,
     setProgress,
     setExtractedData,
@@ -39,39 +44,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
     setError,
   } = useUploadStore();
 
-  // Build steps based on extraction mode
-  const initialSteps = useMemo(() => {
-    const baseSteps: ProcessingStep[] = [
-      { id: 'parse', label: 'Parsing PDF document', status: 'pending' },
-      {
-        id: 'extract', label: extractionMode === 'fast'
-          ? 'Extracting financials (Gemini 3 Flash)'
-          : 'Extracting financials (Gemini 3 Pro)',
-        status: 'pending',
-        model: extractionMode === 'fast' ? 'flash' : 'pro'
-      },
-    ];
-
-    if (extractionMode === 'thorough') {
-      baseSteps.push(
-        { id: 'segments', label: 'Analyzing segments (Gemini Pro)', status: 'pending', model: 'pro' },
-        { id: 'mda', label: 'Analyzing MD&A (Gemini Pro)', status: 'pending', model: 'pro' }
-      );
-    } else if (extractionMode === 'validated') {
-      baseSteps.push(
-        { id: 'validate', label: 'Deep validation (Gemini Pro)', status: 'pending', model: 'pro' }
-      );
-    }
-
-    baseSteps.push(
-      { id: 'map', label: 'Validating and mapping data', status: 'pending' },
-      { id: 'complete', label: 'Finalizing results', status: 'pending' }
-    );
-
-    return baseSteps;
-  }, [extractionMode]);
-
-  const [steps, setSteps] = useState<ProcessingStep[]>(initialSteps);
+  const [steps, setSteps] = useState<ProcessingStep[]>(STEPS);
   const [currentStepMessage, setCurrentStepMessage] = useState('');
   const [startTime] = useState(Date.now());
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -100,14 +73,21 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       return;
     }
 
-    // Only need Gemini API key now
+    // Check for required API keys
     if (!hasGeminiKey()) {
       setError('Gemini API key not configured. Add VITE_GEMINI_API_KEY to your environment.');
-      onError();
+      setErrorMessage('Gemini API key not configured. Add VITE_GEMINI_API_KEY to your environment.');
+      return;
+    }
+
+    if (!hasAnthropicKey()) {
+      setError('Anthropic API key not configured. Add VITE_ANTHROPIC_API_KEY to your environment.');
+      setErrorMessage('Anthropic API key not configured. Add VITE_ANTHROPIC_API_KEY to your environment.');
       return;
     }
 
     const geminiApiKey = getGeminiApiKey();
+    const anthropicApiKey = getAnthropicApiKey();
     let cancelled = false;
 
     const runExtraction = async () => {
@@ -140,151 +120,102 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         // Truncate text for LLM if needed
         const truncatedText = truncateForLLM(parseResult.text, 100000);
 
-        // Step 2: Extract with Gemini
-        updateStep('extract', 'active');
-        const modelName = extractionMode === 'fast' ? 'Gemini 3 Flash' : 'Gemini 3 Pro';
-        setStatus('extracting', `Analyzing with ${modelName}...`);
-        setCurrentStepMessage(`Sending to ${modelName} for comprehensive analysis...`);
+        // Step 2: Gemini 3 Flash extraction
+        updateStep('flash', 'active');
+        setStatus('extracting', 'Analyzing with Gemini 3 Flash...');
+        setCurrentStepMessage('Running extraction pass 1 with Gemini 3 Flash (fast)...');
 
-        const extractionResult = await extractFinancialsWithGemini(
+        const flashResult = await extractFinancialsWithGemini(
           truncatedText,
           geminiApiKey,
           (message) => setCurrentStepMessage(message),
-          extractionMode === 'fast' // Use Flash for fast mode, Pro for others
+          true // useFlash = true
         );
 
         if (cancelled) return;
 
-        updateStep('extract', 'complete');
+        updateStep('flash', 'complete');
         currentStep++;
         setProgress(progressForStep(0));
 
-        const finalFinancials = extractionResult.financials;
-        const finalConfidence = extractionResult.confidence;
-        let allWarnings: ExtractionWarning[] = [...extractionResult.warnings];
+        // Step 3: Gemini 3 Pro extraction
+        updateStep('pro', 'active');
+        setStatus('extracting', 'Analyzing with Gemini 3 Pro...');
+        setCurrentStepMessage('Running extraction pass 2 with Gemini 3 Pro (accurate)...');
 
-        // Thorough mode: Add segment and MD&A analysis
-        if (extractionMode === 'thorough') {
-          // Segments
-          updateStep('segments', 'active');
-          setStatus('extracting', 'Analyzing segments...');
-          setCurrentStepMessage('Extracting segment breakdowns with Gemini 3 Pro...');
+        const proResult = await extractFinancialsWithGemini(
+          truncatedText,
+          geminiApiKey,
+          (message) => setCurrentStepMessage(message),
+          false // useFlash = false (use Pro)
+        );
 
-          try {
-            const segmentResult = await extractSegmentsWithGemini(
-              truncatedText,
-              geminiApiKey,
-              (message) => setCurrentStepMessage(message)
-            );
+        if (cancelled) return;
 
-            // Add segment info to extraction notes
-            if (segmentResult.segments.length > 0) {
-              finalFinancials.extractionNotes.push(
-                `Found ${segmentResult.segments.length} business segments: ${segmentResult.segments.map(s => s.name).join(', ')}`
-              );
-            }
-          } catch (err) {
-            allWarnings.push({
-              field: 'segments',
-              message: `Segment analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-              severity: 'low',
-            });
-          }
+        updateStep('pro', 'complete');
+        currentStep++;
+        setProgress(progressForStep(0));
 
-          if (cancelled) return;
+        // Step 4: Claude Opus extraction
+        updateStep('claude', 'active');
+        setStatus('extracting', 'Analyzing with Claude Opus...');
+        setCurrentStepMessage('Running extraction pass 3 with Claude Opus (best reasoning)...');
 
-          updateStep('segments', 'complete');
-          currentStep++;
-          setProgress(progressForStep(0));
+        const claudeResult = await extractFinancialsWithClaude(
+          truncatedText,
+          anthropicApiKey,
+          (message) => setCurrentStepMessage(message)
+        );
 
-          // MD&A
-          updateStep('mda', 'active');
-          setStatus('extracting', 'Analyzing MD&A...');
-          setCurrentStepMessage('Performing MD&A qualitative analysis with Gemini 3 Pro...');
+        if (cancelled) return;
 
-          try {
-            const mdaResult = await analyzeMDAWithGemini(
-              truncatedText,
-              geminiApiKey,
-              (message) => setCurrentStepMessage(message)
-            );
+        updateStep('claude', 'complete');
+        currentStep++;
+        setProgress(progressForStep(0));
 
-            // Add MD&A insights to notes
-            finalFinancials.extractionNotes.push(
-              `Management tone: ${mdaResult.managementTone}`,
-              `Key risks identified: ${mdaResult.risks.length}`,
-              `Summary: ${mdaResult.summary}`
-            );
-          } catch (err) {
-            allWarnings.push({
-              field: 'mda',
-              message: `MD&A analysis failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-              severity: 'low',
-            });
-          }
+        // Step 5: Final cross-model validation
+        updateStep('review', 'active');
+        setStatus('extracting', 'Final validation...');
+        setCurrentStepMessage('Comparing all extractions against source document...');
 
-          if (cancelled) return;
+        const finalResult = await performFinalReview(
+          flashResult,
+          proResult,
+          claudeResult,
+          truncatedText,
+          anthropicApiKey,
+          (message) => setCurrentStepMessage(message)
+        );
 
-          updateStep('mda', 'complete');
-          currentStep++;
-          setProgress(progressForStep(0));
-        }
+        if (cancelled) return;
 
-        // Validated mode: Run second extraction pass for validation
-        if (extractionMode === 'validated') {
-          updateStep('validate', 'active');
-          setStatus('extracting', 'Deep validation...');
-          setCurrentStepMessage('Running validation pass with Gemini 3 Pro...');
+        updateStep('review', 'complete');
+        currentStep++;
+        setProgress(progressForStep(0));
 
-          try {
-            // Run second extraction for comparison
-            const validationResult = await extractFinancialsWithGemini(
-              truncatedText,
-              geminiApiKey,
-              (message) => setCurrentStepMessage(message)
-            );
+        // Step 6: Map to assumptions
+        updateStep('map', 'active');
+        setStatus('mapping', 'Processing final results...');
+        setCurrentStepMessage('Calculating derived metrics...');
 
-            // Compare and report any discrepancies
-            const discrepancies: string[] = [];
-            const fields = ['revenue', 'netIncome', 'totalAssets', 'totalDebt'] as const;
+        const finalFinancials = finalResult.financials;
+        const finalConfidence = finalResult.confidence;
+        let allWarnings: ExtractionWarning[] = [...(finalResult.warnings || [])];
 
-            for (const field of fields) {
-              const original = Number(finalFinancials[field as keyof typeof finalFinancials] || 0);
-              const validated = Number(validationResult.financials[field as keyof typeof validationResult.financials] || 0);
-              if (original > 0 && validated > 0 && Math.abs(original - validated) / original > 0.01) {
-                discrepancies.push(`${field}: ${original.toLocaleString()} vs ${validated.toLocaleString()}`);
-              }
-            }
-
-            if (discrepancies.length === 0) {
-              finalFinancials.extractionNotes.push('✓ Validation pass confirmed all key figures');
-              finalConfidence.overall = Math.min(1, finalConfidence.overall + 0.1);
-            } else {
-              allWarnings.push({
-                field: 'validation',
-                message: `Minor discrepancies found: ${discrepancies.join(', ')}`,
-                severity: 'medium',
-              });
-            }
-          } catch (err) {
+        // Add validation summary to notes
+        if (finalResult.validationSummary) {
+          finalFinancials.extractionNotes.push(
+            `Cross-model agreement rate: ${(finalResult.validationSummary.agreementRate * 100).toFixed(0)}%`,
+            `Validation notes: ${finalResult.validationSummary.notes}`
+          );
+          if (finalResult.validationSummary.majorDiscrepancies.length > 0) {
             allWarnings.push({
               field: 'validation',
-              message: `Validation pass failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              message: `Discrepancies found in: ${finalResult.validationSummary.majorDiscrepancies.join(', ')}`,
               severity: 'medium',
             });
           }
-
-          if (cancelled) return;
-
-          updateStep('validate', 'complete');
-          currentStep++;
-          setProgress(progressForStep(0));
         }
-
-        // Step: Validate and map
-        updateStep('map', 'active');
-        setStatus('mapping', 'Processing results...');
-        setCurrentStepMessage('Calculating derived metrics...');
 
         const derivedMetrics = calculateDerivedMetrics(finalFinancials);
         const assumptions = mapToAssumptions(finalFinancials, derivedMetrics);
@@ -299,12 +230,9 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
         updateStep('map', 'complete');
         currentStep++;
-        setProgress(progressForStep(0));
+        setProgress(100);
 
-        // Step: Finalize
-        updateStep('complete', 'active');
-        setCurrentStepMessage('Finalizing...');
-
+        // Create metadata
         const metadata: ExtractionMetadata = {
           fileName: file.name,
           fileSize: file.size,
@@ -318,11 +246,6 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         };
 
         setMetadata(metadata);
-
-        if (cancelled) return;
-
-        updateStep('complete', 'complete');
-        setProgress(100);
         setStatus('complete', 'Done!');
 
         // Small delay before transitioning
@@ -345,8 +268,6 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             step.status === 'active' ? { ...step, status: 'error' } : step
           )
         );
-
-        // Don't call onError immediately - let user see the error and retry
       }
     };
 
@@ -355,10 +276,19 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
     return () => {
       cancelled = true;
     };
-  }, [file, extractionMode, onComplete, onError, setError, setStatus, setProgress, setExtractedData, setDerivedMetrics, setMetadata, steps.length, startTime]);
+  }, [file, onComplete, onError, setError, setStatus, setProgress, setExtractedData, setDerivedMetrics, setMetadata, steps.length, startTime]);
 
   const getStepIcon = (step: ProcessingStep) => {
-    const { status, model } = step;
+    const { status, icon } = step;
+
+    const iconColor = {
+      flash: 'text-cyan-400',
+      pro: 'text-blue-400',
+      claude: 'text-orange-400',
+      review: 'text-purple-400',
+      parse: 'text-zinc-400',
+      map: 'text-emerald-400',
+    }[icon];
 
     if (status === 'complete') {
       return <Check className="w-5 h-5 text-emerald-400" />;
@@ -367,50 +297,54 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       return <AlertCircle className="w-5 h-5 text-red-400" />;
     }
     if (status === 'active') {
-      return <Loader2 className={`w-5 h-5 animate-spin ${model === 'pro' ? 'text-blue-400' : 'text-cyan-400'
-        }`} />;
+      return <Loader2 className={`w-5 h-5 animate-spin ${iconColor}`} />;
     }
-    return <div className="w-5 h-5 rounded-full border-2 border-zinc-600" />;
+
+    // Pending state - show the icon for the step
+    const IconComponent = {
+      flash: Zap,
+      pro: Sparkles,
+      claude: Brain,
+      review: Shield,
+      parse: FileText,
+      map: Check,
+    }[icon];
+
+    return <IconComponent className="w-5 h-5 text-zinc-600" />;
   };
 
-  const getModelBadge = (model?: 'flash' | 'pro') => {
-    if (!model) return null;
-
-    if (model === 'flash') {
-      return (
-        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded text-xs">
-          <Zap className="w-3 h-3" />
-          Flash
-        </span>
-      );
-    }
-    return (
-      <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded text-xs">
-        <Sparkles className="w-3 h-3" />
-        Pro
-      </span>
-    );
-  };
-
-  const getModeIcon = () => {
-    switch (extractionMode) {
-      case 'fast':
-        return <Zap className="w-4 h-4 text-cyan-400" />;
-      case 'thorough':
-        return <Sparkles className="w-4 h-4 text-blue-400" />;
-      case 'validated':
-        return <Shield className="w-4 h-4 text-purple-400" />;
-    }
-  };
-
-  const getModeName = () => {
-    switch (extractionMode) {
-      case 'fast':
-        return 'Fast (Gemini Flash)';
-      case 'thorough':
-        return 'Thorough (Gemini Pro)';
-      case 'validated':
-        return 'Validated (Gemini Pro)';
+  const getModelBadge = (icon: ProcessingStep['icon']) => {
+    switch (icon) {
+      case 'flash':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded text-xs">
+            <Zap className="w-3 h-3" />
+            Gemini Flash
+          </span>
+        );
+      case 'pro':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded text-xs">
+            <Sparkles className="w-3 h-3" />
+            Gemini Pro
+          </span>
+        );
+      case 'claude':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-500/10 text-orange-400 rounded text-xs">
+            <Brain className="w-3 h-3" />
+            Claude Opus
+          </span>
+        );
+      case 'review':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded text-xs">
+            <Shield className="w-3 h-3" />
+            Final Review
+          </span>
+        );
+      default:
+        return null;
     }
   };
 
@@ -424,20 +358,16 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-zinc-100">Terminal Zero</h1>
-            <p className="text-sm text-zinc-500">Processing SEC Filing</p>
+            <p className="text-sm text-zinc-500">Multi-Model Validated Extraction</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-zinc-400">
-              {getModeIcon()}
-              <span>{getModeName()}</span>
+              <Shield className="w-4 h-4 text-purple-400" />
+              <span>4-Layer Validation</span>
             </div>
             <button
               onClick={onCancel}
-              className="
-                flex items-center gap-2 px-3 py-2
-                text-sm text-zinc-400 hover:text-zinc-200
-                transition-colors
-              "
+              className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Cancel
@@ -452,7 +382,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           {/* File Info */}
           <div className="flex items-center gap-4 p-4 bg-zinc-900 rounded-lg border border-zinc-800">
             <div className="p-3 bg-zinc-800 rounded-lg">
-              <FileText className="w-6 h-6 text-cyan-400" />
+              <FileText className="w-6 h-6 text-purple-400" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-zinc-200 truncate">
@@ -468,14 +398,9 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           <div className="space-y-2">
             <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-500 ease-out ${errorMessage
-                  ? 'bg-red-500'
-                  : extractionMode === 'fast'
-                    ? 'bg-cyan-500'
-                    : extractionMode === 'thorough'
-                      ? 'bg-blue-500'
-                      : 'bg-purple-500'
-                  }`}
+                className={`h-full transition-all duration-500 ease-out ${
+                  errorMessage ? 'bg-red-500' : 'bg-gradient-to-r from-cyan-500 via-blue-500 via-orange-500 to-purple-500'
+                }`}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -518,9 +443,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
                 className={`
                   flex items-center gap-4 p-4 rounded-lg transition-colors
                   ${step.status === 'active'
-                    ? step.model === 'pro'
-                      ? 'bg-zinc-900 border border-blue-500/30'
-                      : 'bg-zinc-900 border border-cyan-500/30'
+                    ? 'bg-zinc-900 border border-zinc-700'
                     : 'bg-zinc-900/50'
                   }
                   ${step.status === 'error' ? 'border border-red-500/30' : ''}
@@ -541,7 +464,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
                   >
                     {step.label}
                   </p>
-                  {getModelBadge(step.model)}
+                  {getModelBadge(step.icon)}
                 </div>
                 <div className="text-xs text-zinc-500">
                   {index + 1}/{steps.length}
@@ -549,13 +472,20 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
               </div>
             ))}
           </div>
+
+          {/* Pipeline explanation */}
+          <div className="p-4 bg-zinc-900/30 border border-zinc-800 rounded-lg">
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              <span className="text-purple-400 font-medium">4-Layer Validation:</span> Your document is analyzed by three independent AI models (Gemini Flash, Gemini Pro, Claude Opus), then cross-validated against the source for maximum accuracy.
+            </p>
+          </div>
         </div>
       </main>
 
       {/* Footer */}
       <footer className="px-6 py-4 border-t border-zinc-800">
         <div className="max-w-4xl mx-auto text-center text-xs text-zinc-600">
-          Powered by Gemini 3 Flash & Pro • No OpenAI required
+          Powered by Gemini 3 Flash & Pro + Claude Opus
         </div>
       </footer>
     </div>

@@ -11,9 +11,6 @@ import type {
   DerivedMetrics,
 } from '../lib/extraction-types';
 
-// Extraction mode determines which models are used
-export type ExtractionMode = 'fast' | 'thorough' | 'validated';
-
 interface UploadState {
   // File
   file: File | null;
@@ -35,9 +32,6 @@ interface UploadState {
   // Error handling
   error: string | null;
 
-  // Extraction mode
-  extractionMode: ExtractionMode;
-
   // Actions
   setFile: (file: File) => void;
   clearFile: () => void;
@@ -52,7 +46,6 @@ interface UploadState {
   setMetadata: (metadata: ExtractionMetadata) => void;
   setError: (error: string) => void;
   clearError: () => void;
-  setExtractionMode: (mode: ExtractionMode) => void;
   reset: () => void;
 }
 
@@ -69,7 +62,6 @@ const initialState = {
   warnings: [],
   metadata: null,
   error: null,
-  extractionMode: 'fast' as ExtractionMode,
 };
 
 export const useUploadStore = create<UploadState>((set) => ({
@@ -129,10 +121,6 @@ export const useUploadStore = create<UploadState>((set) => ({
 
   clearError: () => {
     set({ error: null });
-  },
-
-  setExtractionMode: (mode: ExtractionMode) => {
-    set({ extractionMode: mode });
   },
 
   reset: () => {
