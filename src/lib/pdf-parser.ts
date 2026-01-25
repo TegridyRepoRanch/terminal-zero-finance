@@ -57,10 +57,10 @@ async function getPDFJS(): Promise<typeof import('pdfjs-dist')> {
     'PDF.js module load'
   );
 
-  // Disable worker for more reliable parsing in serverless environments
-  // This runs PDF.js on the main thread - slightly slower but more reliable
-  console.log('[PDF] Disabling worker for reliability');
-  pdfjsModule.GlobalWorkerOptions.workerSrc = '';
+  // Use CDN-hosted worker for reliability
+  const workerUrl = 'https://unpkg.com/pdfjs-dist@5.4.530/build/pdf.worker.min.mjs';
+  console.log('[PDF] Using CDN worker:', workerUrl);
+  pdfjsModule.GlobalWorkerOptions.workerSrc = workerUrl;
 
   console.log('[PDF] PDF.js module loaded successfully');
   return pdfjsModule;
@@ -97,13 +97,37 @@ export async function extractTextFromPDF(
     useWorkerFetch: false,
     isEvalSupported: false,
     useSystemFonts: true,
+    disableAutoFetch: true,
+    disableStream: true,
   });
 
-  const pdf: PDFDocumentProxy = await withTimeout(
-    loadingTask.promise,
-    60000,
-    'PDF document loading'
-  );
+  // Add progress logging
+  loadingTask.onProgress = (progress: { loaded: number; total: number }) => {
+    if (progress.total > 0) {
+      const percent = Math.round((progress.loaded / progress.total) * 100);
+      console.log(`[PDF] Loading: ${percent}% (${progress.loaded}/${progress.total})`);
+    }
+  };
+
+  let pdf: PDFDocumentProxy;
+  try {
+    pdf = await withTimeout(
+      loadingTask.promise,
+      60000,
+      'PDF document loading'
+    );
+  } catch (loadError) {
+    console.error('[PDF] Failed to load with worker, trying without...', loadError);
+    // Retry without worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    const retryTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+    });
+    pdf = await withTimeout(retryTask.promise, 60000, 'PDF document loading (no worker)');
+  }
+
   const pageCount = pdf.numPages;
   console.log('[PDF] Document loaded, pages:', pageCount);
 

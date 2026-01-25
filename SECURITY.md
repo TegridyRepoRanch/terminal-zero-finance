@@ -1,8 +1,31 @@
 # Security Guidelines
 
-## Critical Security Warning
+## ✅ Secure Backend API Implemented
 
-**IMPORTANT:** This application currently exposes API keys in the frontend code. This is a **critical security vulnerability** and must be addressed before any public deployment.
+**UPDATE:** A secure backend API proxy has been implemented to address the critical API key exposure issue. See [BACKEND_SETUP.md](BACKEND_SETUP.md) for setup instructions.
+
+### Quick Start (Secure Mode)
+```bash
+npm run setup          # Install all dependencies
+npm run dev:all        # Run frontend + backend
+```
+
+## Migration Status
+
+The project now supports **two modes**:
+
+1. **✅ Secure Mode (RECOMMENDED)**: Backend API proxy
+   - API keys stored securely on server
+   - Rate limiting and input validation
+   - CORS protection
+   - See [BACKEND_SETUP.md](BACKEND_SETUP.md)
+
+2. **⚠️ Legacy Mode (DEPRECATED)**: Direct API calls
+   - API keys exposed in frontend
+   - **Only for development/testing**
+   - **DO NOT use in production**
+
+## Previous Security Warning (Now Resolved)
 
 ### Current Security Issues
 
