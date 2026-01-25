@@ -1,5 +1,5 @@
 // Processing Screen Component - Gemini Only
-// Shows progress during PDF extraction with Gemini 2.5 Flash/Pro
+// Shows progress during PDF extraction with Gemini 3 Flash/Pro
 
 import { useEffect, useState, useMemo } from 'react';
 import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Shield } from 'lucide-react';
@@ -45,8 +45,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       { id: 'parse', label: 'Parsing PDF document', status: 'pending' },
       {
         id: 'extract', label: extractionMode === 'fast'
-          ? 'Extracting financials (Gemini 2.5 Flash)'
-          : 'Extracting financials (Gemini 2.5 Pro)',
+          ? 'Extracting financials (Gemini 3 Flash)'
+          : 'Extracting financials (Gemini 3 Pro)',
         status: 'pending',
         model: extractionMode === 'fast' ? 'flash' : 'pro'
       },
@@ -142,7 +142,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
         // Step 2: Extract with Gemini
         updateStep('extract', 'active');
-        const modelName = extractionMode === 'fast' ? 'Gemini 2.5 Flash' : 'Gemini 2.5 Pro';
+        const modelName = extractionMode === 'fast' ? 'Gemini 3 Flash' : 'Gemini 3 Pro';
         setStatus('extracting', `Analyzing with ${modelName}...`);
         setCurrentStepMessage(`Sending to ${modelName} for comprehensive analysis...`);
 
@@ -168,7 +168,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           // Segments
           updateStep('segments', 'active');
           setStatus('extracting', 'Analyzing segments...');
-          setCurrentStepMessage('Extracting segment breakdowns with Gemini 2.5 Pro...');
+          setCurrentStepMessage('Extracting segment breakdowns with Gemini 3 Pro...');
 
           try {
             const segmentResult = await extractSegmentsWithGemini(
@@ -200,7 +200,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           // MD&A
           updateStep('mda', 'active');
           setStatus('extracting', 'Analyzing MD&A...');
-          setCurrentStepMessage('Performing MD&A qualitative analysis with Gemini 2.5 Pro...');
+          setCurrentStepMessage('Performing MD&A qualitative analysis with Gemini 3 Pro...');
 
           try {
             const mdaResult = await analyzeMDAWithGemini(
@@ -234,7 +234,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         if (extractionMode === 'validated') {
           updateStep('validate', 'active');
           setStatus('extracting', 'Deep validation...');
-          setCurrentStepMessage('Running validation pass with Gemini 2.5 Pro...');
+          setCurrentStepMessage('Running validation pass with Gemini 3 Pro...');
 
           try {
             // Run second extraction for comparison
@@ -555,7 +555,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       {/* Footer */}
       <footer className="px-6 py-4 border-t border-zinc-800">
         <div className="max-w-4xl mx-auto text-center text-xs text-zinc-600">
-          Powered by Gemini 2.5 Flash & Pro • No OpenAI required
+          Powered by Gemini 3 Flash & Pro • No OpenAI required
         </div>
       </footer>
     </div>

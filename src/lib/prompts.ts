@@ -5,7 +5,7 @@
 // =============================================================================
 // FULL FINANCIAL EXTRACTION PROMPT
 // Used by: extractFinancialsWithGemini()
-// Model: Gemini 2.5 Flash (fast) or Gemini 2.5 Pro (accurate)
+// Model: Gemini 3 Flash (fast) or Gemini 3 Pro (accurate)
 // =============================================================================
 
 export const FINANCIAL_EXTRACTION_PROMPT = `You are a financial analyst AI. Extract key financial data from the following SEC 10-K or 10-Q filing.
@@ -75,7 +75,7 @@ Filing text:
 // =============================================================================
 // SEGMENT BREAKDOWN EXTRACTION PROMPT
 // Used by: extractSegmentsWithGemini()
-// Model: Gemini 2.5 Pro
+// Model: Gemini 3 Pro
 // =============================================================================
 
 export const SEGMENT_EXTRACTION_PROMPT = `You are an expert financial analyst. Extract detailed segment/business unit breakdowns from this SEC filing.
@@ -109,7 +109,7 @@ Filing text:
 // =============================================================================
 // MD&A QUALITATIVE ANALYSIS PROMPT
 // Used by: analyzeMDAWithGemini()
-// Model: Gemini 2.5 Pro
+// Model: Gemini 3 Pro
 // =============================================================================
 
 export const MDA_ANALYSIS_PROMPT = `You are an expert financial analyst. Perform qualitative analysis of the Management Discussion & Analysis (MD&A) section.
@@ -154,7 +154,7 @@ Filing text:
 // =============================================================================
 // COMPLEX TABLE EXTRACTION PROMPT
 // Used by: extractTablesWithGemini()
-// Model: Gemini 2.5 Pro
+// Model: Gemini 3 Pro
 // =============================================================================
 
 export const TABLE_EXTRACTION_PROMPT = `You are an expert at extracting financial data from complex tables in SEC filings.
@@ -212,7 +212,7 @@ Filing text:
 // =============================================================================
 // VALIDATION COMPARISON PROMPT
 // Used by: validateExtractionWithGemini()
-// Model: Gemini 2.5 Pro
+// Model: Gemini 3 Pro
 // Note: Uses string replacement for {extraction1} and {extraction2}
 // =============================================================================
 

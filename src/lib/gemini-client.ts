@@ -1,5 +1,5 @@
 // Gemini Client for SEC Filing Analysis
-// Uses Gemini 2.5 Pro/Flash for financial data extraction
+// Uses Gemini 3 Pro/Flash for financial data extraction
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type {
@@ -110,8 +110,8 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: strin
  * Get display name for a model ID
  */
 function getModelDisplayName(modelId: string): string {
-  if (modelId === GEMINI_MODELS.FLASH) return 'Gemini 2.5 Flash';
-  if (modelId === GEMINI_MODELS.PRO) return 'Gemini 2.5 Pro';
+  if (modelId === GEMINI_MODELS.FLASH) return 'Gemini 3 Flash';
+  if (modelId === GEMINI_MODELS.PRO) return 'Gemini 3 Pro';
   return modelId;
 }
 
