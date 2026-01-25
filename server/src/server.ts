@@ -7,7 +7,9 @@ import rateLimit from 'express-rate-limit';
 import { config, validateConfig } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { initializeGeminiClient } from './services/gemini.service.js';
+import { initializeAnthropicClient } from './services/anthropic.service.js';
 import extractionRoutes from './routes/extraction.routes.js';
+import claudeRoutes from './routes/claude.routes.js';
 
 // Validate configuration
 try {
@@ -17,8 +19,9 @@ try {
   process.exit(1);
 }
 
-// Initialize Gemini client
+// Initialize AI clients
 initializeGeminiClient();
+initializeAnthropicClient();
 
 // Create Express app
 const app = express();
@@ -69,6 +72,7 @@ if (config.nodeEnv === 'development') {
 
 // API routes
 app.use('/api/extraction', extractionRoutes);
+app.use('/api/claude', claudeRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -99,6 +103,7 @@ const server = app.listen(config.port, () => {
   console.log(`Server running on: http://localhost:${config.port}`);
   console.log(`Health check: http://localhost:${config.port}/health`);
   console.log(`API endpoints: http://localhost:${config.port}/api/extraction/*`);
+  console.log(`               http://localhost:${config.port}/api/claude/*`);
   console.log('='.repeat(60));
 });
 

@@ -57,14 +57,10 @@ async function getPDFJS(): Promise<typeof import('pdfjs-dist')> {
     'PDF.js module load'
   );
 
-  // Configure worker after module is loaded
-  const workerUrl = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url
-  ).toString();
-
-  console.log('[PDF] Setting worker URL:', workerUrl);
-  pdfjsModule.GlobalWorkerOptions.workerSrc = workerUrl;
+  // Disable worker for more reliable parsing in serverless environments
+  // This runs PDF.js on the main thread - slightly slower but more reliable
+  console.log('[PDF] Disabling worker for reliability');
+  pdfjsModule.GlobalWorkerOptions.workerSrc = '';
 
   console.log('[PDF] PDF.js module loaded successfully');
   return pdfjsModule;

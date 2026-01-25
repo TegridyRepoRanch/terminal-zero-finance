@@ -18,9 +18,10 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
  */
 async function apiRequest<T>(
   endpoint: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  baseRoute: string = 'extraction'
 ): Promise<T> {
-  const url = `${BACKEND_URL}/api/extraction/${endpoint}`;
+  const url = `${BACKEND_URL}/api/${baseRoute}/${endpoint}`;
 
   try {
     const response = await fetch(url, {
@@ -127,6 +128,40 @@ export async function validateExtractionWithBackend(
   return apiRequest<ValidationResult>('validate', {
     validationPrompt,
   });
+}
+
+/**
+ * Extract financials using Claude Opus
+ */
+export async function extractFinancialsWithClaudeBackend(
+  text: string,
+  prompt: string,
+  onProgress?: (message: string) => void
+): Promise<LLMExtractionResponse> {
+  onProgress?.('Extracting financials with Claude Opus...');
+
+  return apiRequest<LLMExtractionResponse>('financials', {
+    text,
+    prompt,
+  }, 'claude');
+}
+
+/**
+ * Perform final cross-model validation using Claude
+ */
+export async function performFinalReviewBackend(
+  finalReviewPrompt: string,
+  onProgress?: (message: string) => void
+): Promise<LLMExtractionResponse & { validationSummary?: unknown }> {
+  onProgress?.('Performing final cross-model validation with Claude Opus...');
+
+  return apiRequest<LLMExtractionResponse & { validationSummary?: unknown }>(
+    'final-review',
+    {
+      finalReviewPrompt,
+    },
+    'claude'
+  );
 }
 
 /**

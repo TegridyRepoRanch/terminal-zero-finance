@@ -10,6 +10,7 @@ export const config = {
 
   // API Keys
   geminiApiKey: process.env.GEMINI_API_KEY,
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 
   // CORS
   allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',') || [
@@ -32,5 +33,9 @@ export const config = {
 export function validateConfig() {
   if (!config.geminiApiKey) {
     throw new Error('GEMINI_API_KEY environment variable is required');
+  }
+  // Anthropic is optional - only needed if using Claude features
+  if (!config.anthropicApiKey) {
+    console.warn('[Config] ANTHROPIC_API_KEY not set - Claude features will be unavailable');
   }
 }
