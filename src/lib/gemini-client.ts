@@ -248,16 +248,21 @@ export async function extractSegmentsWithGemini(
   const genAI = getGeminiClient(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: SEGMENT_EXTRACTION_PROMPT + text }] }],
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: 'application/json',
-    },
-  });
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: SEGMENT_EXTRACTION_PROMPT + text }] }],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
+    });
 
-  const response = result.response.text();
-  return JSON.parse(response) as SegmentAnalysis;
+    const response = result.response.text();
+    return JSON.parse(response) as SegmentAnalysis;
+  } catch (error) {
+    console.error('[Gemini] Segment extraction error:', error);
+    throw new Error(`Segment extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 /**
@@ -273,16 +278,21 @@ export async function analyzeMDAWithGemini(
   const genAI = getGeminiClient(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: MDA_ANALYSIS_PROMPT + text }] }],
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: 'application/json',
-    },
-  });
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: MDA_ANALYSIS_PROMPT + text }] }],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: 'application/json',
+      },
+    });
 
-  const response = result.response.text();
-  return JSON.parse(response) as MDAanalysis;
+    const response = result.response.text();
+    return JSON.parse(response) as MDAanalysis;
+  } catch (error) {
+    console.error('[Gemini] MD&A analysis error:', error);
+    throw new Error(`MD&A analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 /**
@@ -298,15 +308,21 @@ export async function extractTablesWithGemini(
   const genAI = getGeminiClient(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: TABLE_EXTRACTION_PROMPT + text }] }],
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: 'application/json',
-    },
-  });
+  let response: string;
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: TABLE_EXTRACTION_PROMPT + text }] }],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
+    });
+    response = result.response.text();
+  } catch (error) {
+    console.error('[Gemini] Table extraction API error:', error);
+    throw new Error(`Table extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 
-  const response = result.response.text();
   const parsed = JSON.parse(response);
 
   // Transform to standard LLMExtractionResponse format
@@ -367,16 +383,21 @@ export async function validateExtractionWithGemini(
     .replace('{extraction1}', JSON.stringify(gptExtraction.financials, null, 2))
     .replace('{extraction2}', JSON.stringify(geminiExtraction.financials, null, 2));
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: 'application/json',
-    },
-  });
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
+    });
 
-  const response = result.response.text();
-  return JSON.parse(response) as ValidationResult;
+    const response = result.response.text();
+    return JSON.parse(response) as ValidationResult;
+  } catch (error) {
+    console.error('[Gemini] Validation error:', error);
+    throw new Error(`Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 /**
@@ -459,16 +480,31 @@ Filing text:
   const genAI = getGeminiClient(apiKey);
   // Use stable Gemini 2.5 model identifiers
   const modelId = useFlash ? 'gemini-2.5-flash' : 'gemini-2.5-pro';
+  console.log(`[Gemini] Using model: ${modelId}`);
+
   const model = genAI.getGenerativeModel({ model: modelId });
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: FULL_EXTRACTION_PROMPT }] }],
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: 'application/json',
-    },
-  });
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: FULL_EXTRACTION_PROMPT }] }],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
+    });
 
-  const response = result.response.text();
-  return JSON.parse(response) as LLMExtractionResponse;
+    const response = result.response.text();
+    console.log(`[Gemini] Response received, length: ${response.length}`);
+
+    try {
+      return JSON.parse(response) as LLMExtractionResponse;
+    } catch (parseError) {
+      console.error('[Gemini] JSON parse error:', parseError);
+      console.error('[Gemini] Raw response:', response.substring(0, 500));
+      throw new Error(`Failed to parse Gemini response: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
+    }
+  } catch (apiError) {
+    console.error('[Gemini] API error:', apiError);
+    throw new Error(`Gemini API error: ${apiError instanceof Error ? apiError.message : 'Unknown API error'}`);
+  }
 }
