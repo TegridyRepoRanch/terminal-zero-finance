@@ -45,10 +45,11 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
   } = useUploadStore();
 
   const [steps, setSteps] = useState<ProcessingStep[]>(STEPS);
-  const [currentStepMessage, setCurrentStepMessage] = useState('');
+  const [currentStepMessage, setCurrentStepMessage] = useState('Initializing extraction pipeline...');
   const [startTime] = useState(Date.now());
   const [elapsedTime, setElapsedTime] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isStarting, setIsStarting] = useState(true);
 
   // Update elapsed time every second
   useEffect(() => {
@@ -92,6 +93,9 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
     const runExtraction = async () => {
       try {
+        // Signal that we've started
+        setIsStarting(false);
+
         const totalSteps = steps.length;
         let currentStep = 0;
 
@@ -271,10 +275,14 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       }
     };
 
-    runExtraction();
+    // Small delay to ensure UI renders before starting heavy extraction
+    const timeoutId = setTimeout(() => {
+      runExtraction();
+    }, 100);
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
     };
   }, [file, onComplete, onError, setError, setStatus, setProgress, setExtractedData, setDerivedMetrics, setMetadata, steps.length, startTime]);
 
@@ -397,16 +405,21 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           {/* Progress Bar */}
           <div className="space-y-2">
             <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-500 ease-out ${
-                  errorMessage ? 'bg-red-500' : 'bg-gradient-to-r from-cyan-500 via-blue-500 via-orange-500 to-purple-500'
-                }`}
-                style={{ width: `${progressPercent}%` }}
-              />
+              {isStarting ? (
+                <div className="h-full w-full bg-gradient-to-r from-cyan-500 via-blue-500 via-orange-500 to-purple-500 animate-pulse" />
+              ) : (
+                <div
+                  className={`h-full transition-all duration-500 ease-out ${
+                    errorMessage ? 'bg-red-500' : 'bg-gradient-to-r from-cyan-500 via-blue-500 via-orange-500 to-purple-500'
+                  }`}
+                  style={{ width: `${Math.max(progressPercent, 2)}%` }}
+                />
+              )}
             </div>
             <div className="flex items-center justify-between">
-              <p className="text-sm text-zinc-400">
-                {errorMessage ? 'Error occurred' : (currentStepMessage || 'Preparing...')}
+              <p className="text-sm text-zinc-400 flex items-center gap-2">
+                {isStarting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {errorMessage ? 'Error occurred' : currentStepMessage}
               </p>
               <p className="text-xs text-zinc-500 font-mono">
                 {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}
