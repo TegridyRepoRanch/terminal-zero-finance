@@ -8,6 +8,8 @@ Secure backend proxy for AI API calls (Gemini & Claude). This backend keeps API 
 - ✅ **Rate Limiting** - Protect against abuse (100 requests per 15 minutes)
 - ✅ **Input Validation** - Zod schema validation for all requests
 - ✅ **CORS Protection** - Whitelist allowed origins
+- ✅ **CSRF Protection** - Double-submit cookie pattern
+- ✅ **Intelligent Caching** - LRU cache for API responses (100MB, 60min TTL)
 - ✅ **Error Handling** - Comprehensive error handling with appropriate status codes
 - ✅ **Timeout Protection** - 2-minute timeout on AI API calls
 - ✅ **Security Headers** - Helmet.js for security best practices
@@ -122,6 +124,68 @@ Default limits:
 
 Returns `429 Too Many Requests` when exceeded.
 
+## Response Caching
+
+Intelligent LRU (Least Recently Used) cache for expensive API responses.
+
+### Cache Configuration
+- **Max Size**: 100 MB
+- **TTL**: 60 minutes
+- **Strategy**: Content-based hashing (SHA-256)
+- **Eviction**: LRU when size limit reached
+
+### Cache Endpoints
+
+**Get Cache Statistics:**
+```bash
+curl http://localhost:3001/api/cache/stats
+```
+
+Response:
+```json
+{
+  "success": true,
+  "stats": {
+    "hits": 45,
+    "misses": 12,
+    "evictions": 2,
+    "size": 1048576,
+    "entries": 8,
+    "hitRate": "78.95%",
+    "sizeMB": "1.00 MB"
+  }
+}
+```
+
+**Clear Cache:**
+```bash
+curl -X POST http://localhost:3001/api/cache/clear \
+  -H "Content-Type: application/json"
+```
+
+### How It Works
+
+1. **Cache Key Generation**: Request body is hashed with SHA-256
+2. **Cache Lookup**: On POST requests, check if response exists
+3. **Cache Hit**: Return cached response immediately
+4. **Cache Miss**: Fetch from API and cache the response
+5. **Auto-Eviction**: Remove least-used entries when size limit reached
+6. **TTL Expiration**: Automatic expiration after 60 minutes
+
+### Benefits
+
+- **Faster Responses**: Cached responses return instantly
+- **Cost Savings**: Reduce AI API calls (Gemini charges per request)
+- **Better Performance**: Lower latency for repeated requests
+- **Rate Limit Protection**: Fewer API calls = less likely to hit limits
+
+### Cache Invalidation
+
+- Automatic expiration after 60 minutes
+- Manual clearing via `/api/cache/clear` endpoint
+- LRU eviction when cache is full
+- Server restart clears cache
+
 ## CORS Configuration
 
 By default, allows requests from:
@@ -154,12 +218,14 @@ Common status codes:
 ## Security Features
 
 1. **API Key Protection** - Never exposed to frontend
-2. **Rate Limiting** - Prevents abuse
-3. **Input Validation** - Zod schemas on all inputs
-4. **CORS** - Origin whitelisting
-5. **Security Headers** - Helmet.js
-6. **Timeout Protection** - Prevents hanging requests
-7. **Error Sanitization** - Production mode hides stack traces
+2. **CSRF Protection** - Double-submit cookie pattern
+3. **Rate Limiting** - Prevents abuse (100 req/15min)
+4. **Input Validation** - Zod schemas on all inputs
+5. **CORS** - Origin whitelisting
+6. **Security Headers** - Helmet.js (CSP, HSTS, etc.)
+7. **Response Caching** - Intelligent LRU cache (100MB, 60min)
+8. **Timeout Protection** - Prevents hanging requests
+9. **Error Sanitization** - Production mode hides stack traces
 
 ## Production Deployment
 

@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import { config, validateConfig } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { csrfTokenGenerator, csrfProtection, csrfErrorHandler } from './middleware/csrf.js';
+import { cacheMiddleware, getCacheStats, clearCache } from './middleware/cache.js';
 import { initializeGeminiClient } from './services/gemini.service.js';
 import { initializeAnthropicClient } from './services/anthropic.service.js';
 import extractionRoutes from './routes/extraction.routes.js';
@@ -78,9 +79,13 @@ if (config.nodeEnv === 'development') {
 // CSRF token endpoint (GET, no CSRF protection needed)
 app.get('/api/csrf-token', csrfTokenGenerator);
 
-// API routes (with CSRF protection)
-app.use('/api/extraction', csrfProtection, extractionRoutes);
-app.use('/api/claude', csrfProtection, claudeRoutes);
+// Cache management endpoints
+app.get('/api/cache/stats', getCacheStats);
+app.post('/api/cache/clear', csrfProtection, clearCache);
+
+// API routes (with caching and CSRF protection)
+app.use('/api/extraction', cacheMiddleware, csrfProtection, extractionRoutes);
+app.use('/api/claude', cacheMiddleware, csrfProtection, claudeRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -116,7 +121,9 @@ const server = app.listen(config.port, () => {
   console.log(`CSRF token: http://localhost:${config.port}/api/csrf-token`);
   console.log(`API endpoints: http://localhost:${config.port}/api/extraction/*`);
   console.log(`               http://localhost:${config.port}/api/claude/*`);
+  console.log(`Cache management: http://localhost:${config.port}/api/cache/stats`);
   console.log(`CSRF Protection: ${config.csrfEnabled ? 'Enabled' : 'Disabled'}`);
+  console.log(`Response Caching: Enabled (100MB, 60min TTL)`);
   console.log('='.repeat(60));
 });
 

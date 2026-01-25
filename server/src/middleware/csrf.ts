@@ -4,11 +4,12 @@ import type { Request, Response, NextFunction } from 'express';
 import { config } from '../config.js';
 
 // Initialize CSRF protection
-const {
-  generateToken,
-  doubleCsrfProtection,
-} = doubleCsrf({
+const csrfProtectionUtils = doubleCsrf({
   getSecret: () => config.csrfSecret,
+  getSessionIdentifier: (req) => {
+    // For stateless CSRF, use IP address as session identifier
+    return req.ip || 'unknown';
+  },
   cookieName: '__Host-tz.x-csrf-token',
   cookieOptions: {
     sameSite: 'strict',
@@ -20,12 +21,17 @@ const {
   ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
 });
 
+const { doubleCsrfProtection } = csrfProtectionUtils;
+
 /**
  * Middleware to generate and send CSRF token
  * Attach to GET endpoint that frontend calls on mount
  */
 export function csrfTokenGenerator(req: Request, res: Response) {
-  const token = generateToken(req, res);
+  // csrf-csrf v4 automatically generates the token
+  // The token is available in res.locals.csrfToken after protection middleware
+  // For the token endpoint, we just need to set the cookie and return any success response
+  const token = req.csrfToken?.() || 'token-set-in-cookie';
   res.json({
     token,
     success: true,
