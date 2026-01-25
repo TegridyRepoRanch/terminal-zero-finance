@@ -3,9 +3,11 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { config, validateConfig } from './config.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { csrfTokenGenerator, csrfProtection, csrfErrorHandler } from './middleware/csrf.js';
 import { initializeGeminiClient } from './services/gemini.service.js';
 import { initializeAnthropicClient } from './services/anthropic.service.js';
 import extractionRoutes from './routes/extraction.routes.js';
@@ -62,6 +64,9 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Cookie parser (required for CSRF protection)
+app.use(cookieParser());
+
 // Request logging (development only)
 if (config.nodeEnv === 'development') {
   app.use((req, _res, next) => {
@@ -70,9 +75,12 @@ if (config.nodeEnv === 'development') {
   });
 }
 
-// API routes
-app.use('/api/extraction', extractionRoutes);
-app.use('/api/claude', claudeRoutes);
+// CSRF token endpoint (GET, no CSRF protection needed)
+app.get('/api/csrf-token', csrfTokenGenerator);
+
+// API routes (with CSRF protection)
+app.use('/api/extraction', csrfProtection, extractionRoutes);
+app.use('/api/claude', csrfProtection, claudeRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -91,6 +99,9 @@ app.use((_req, res) => {
   });
 });
 
+// CSRF error handler (before general error handler)
+app.use(csrfErrorHandler);
+
 // Error handler (must be last)
 app.use(errorHandler);
 
@@ -102,8 +113,10 @@ const server = app.listen(config.port, () => {
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(`Server running on: http://localhost:${config.port}`);
   console.log(`Health check: http://localhost:${config.port}/health`);
+  console.log(`CSRF token: http://localhost:${config.port}/api/csrf-token`);
   console.log(`API endpoints: http://localhost:${config.port}/api/extraction/*`);
   console.log(`               http://localhost:${config.port}/api/claude/*`);
+  console.log(`CSRF Protection: ${config.csrfEnabled ? 'Enabled' : 'Disabled'}`);
   console.log('='.repeat(60));
 });
 

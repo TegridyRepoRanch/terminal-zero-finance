@@ -13,24 +13,84 @@ import type {
 // Backend API configuration
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
+// CSRF token storage
+let csrfToken: string | null = null;
+
 /**
- * Base API client with error handling
+ * Fetch CSRF token from backend
+ */
+export async function fetchCsrfToken(): Promise<string> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/csrf-token`, {
+      method: 'GET',
+      credentials: 'include', // Include cookies for CSRF validation
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch CSRF token: ${response.status}`);
+    }
+
+    const data = await response.json();
+    csrfToken = data.token;
+    console.log('[CSRF] Token fetched successfully');
+    return data.token;
+  } catch (error) {
+    console.error('[CSRF] Failed to fetch token:', error);
+    throw new Error('Failed to fetch CSRF token. Please refresh the page.');
+  }
+}
+
+/**
+ * Get current CSRF token (fetch if not available)
+ */
+async function getCsrfToken(): Promise<string> {
+  if (!csrfToken) {
+    return await fetchCsrfToken();
+  }
+  return csrfToken;
+}
+
+/**
+ * Clear cached CSRF token (used after validation failure)
+ */
+function clearCsrfToken(): void {
+  csrfToken = null;
+}
+
+/**
+ * Base API client with error handling and CSRF protection
  */
 async function apiRequest<T>(
   endpoint: string,
   body: Record<string, unknown>,
-  baseRoute: string = 'extraction'
+  baseRoute: string = 'extraction',
+  retry: boolean = true
 ): Promise<T> {
   const url = `${BACKEND_URL}/api/${baseRoute}/${endpoint}`;
 
   try {
+    // Get CSRF token
+    const token = await getCsrfToken();
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-csrf-token': token,
       },
+      credentials: 'include', // Include cookies for CSRF validation
       body: JSON.stringify(body),
     });
+
+    // Handle CSRF token errors with automatic retry
+    if (response.status === 403 && retry) {
+      const errorData = await response.json().catch(() => ({}));
+      if (errorData.code === 'CSRF_VALIDATION_FAILED') {
+        console.warn('[CSRF] Token invalid, refetching and retrying...');
+        clearCsrfToken();
+        return apiRequest<T>(endpoint, body, baseRoute, false); // Retry once
+      }
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

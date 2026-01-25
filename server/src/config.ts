@@ -27,6 +27,10 @@ export const config = {
 
   // Validation
   maxTextLength: 500000, // 500KB max text input
+
+  // CSRF Protection
+  csrfSecret: process.env.CSRF_SECRET || 'terminal-zero-csrf-secret-change-in-production',
+  csrfEnabled: process.env.CSRF_ENABLED !== 'false', // Enabled by default
 } as const;
 
 // Validate required config

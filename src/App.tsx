@@ -1,5 +1,6 @@
 // Main App Component
 import { useState, useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { useFinanceStore } from './store/useFinanceStore';
 import { useUploadStore } from './store/useUploadStore';
 import { Sidebar } from './components/Sidebar';
@@ -12,6 +13,8 @@ import { DepreciationSchedule } from './components/DepreciationSchedule';
 import { DebtSchedule } from './components/DebtSchedule';
 import { ValuationEngine } from './components/ValuationEngine';
 import { UploadScreen, ProcessingScreen, ReviewScreen } from './components/upload';
+import { KeyboardShortcutsHelp, ThemeToggle } from './components/ui';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { AlertTriangle, X, Info } from 'lucide-react';
 import type { Assumptions } from './lib/financial-logic';
 import { validateConfig, getConfigMode } from './lib/api-config';
@@ -181,6 +184,9 @@ function ConfigErrorScreen({ validation }: { validation: ReturnType<typeof valid
 function MainContent() {
   const { activeTab } = useFinanceStore();
 
+  // Enable keyboard navigation
+  useKeyboardShortcuts();
+
   const renderContent = () => {
     switch (activeTab) {
       case 'income':
@@ -203,14 +209,20 @@ function MainContent() {
   return (
     <main className="flex-1 flex flex-col overflow-hidden">
       {/* Header with Ticker Search */}
-      <header className="px-6 py-4 border-b border-zinc-800 bg-zinc-950">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
+      <header
+        className="px-4 sm:px-6 py-3 sm:py-4 border-b border-zinc-800 bg-zinc-950 dark:bg-zinc-950"
+        role="banner"
+      >
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-4 sm:gap-6 w-full sm:w-auto">
             <div>
-              <h1 className="text-lg font-bold text-zinc-100">Financial Model</h1>
+              <h1 className="text-base sm:text-lg font-bold text-zinc-100">Financial Model</h1>
               <p className="text-xs text-zinc-500">Real-time DCF Valuation</p>
             </div>
             <TickerSearch />
+            <div className="ml-auto sm:ml-0 flex items-center gap-1">
+              <ThemeToggle />
+            </div>
           </div>
           <TabNav />
         </div>
@@ -258,6 +270,16 @@ export default function App() {
       }
     } else {
       console.error('❌ Configuration errors:', validation.errors);
+    }
+  }, []);
+
+  // Fetch CSRF token on mount (backend mode only)
+  useEffect(() => {
+    const mode = getConfigMode();
+    if (mode === 'backend') {
+      fetchCsrfToken().catch((error) => {
+        console.error('[CSRF] Failed to fetch token on mount:', error);
+      });
     }
   }, []);
 
@@ -340,7 +362,36 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300">
+    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300 dark:bg-zinc-950 dark:text-zinc-300">
+      {/* Toast Notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#18181b',
+            color: '#d4d4d8',
+            border: '1px solid #27272a',
+            borderRadius: '8px',
+          },
+          success: {
+            iconTheme: {
+              primary: '#34d399',
+              secondary: '#18181b',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#f43f5e',
+              secondary: '#18181b',
+            },
+          },
+        }}
+      />
+
+      {/* Keyboard Shortcuts Help Modal */}
+      <KeyboardShortcutsHelp />
+
       {showConfigBanner && (
         <ConfigStatusBanner onDismiss={() => setShowConfigBanner(false)} />
       )}
