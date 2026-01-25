@@ -116,36 +116,42 @@ export function mapToAssumptions(
   const yearlyRepayment =
     data.totalDebt > 0 ? Math.round(data.totalDebt / 10) : 0;
 
+  // Helper for consistent rounding
+  const round = (val: number, decimals: number = 2) => {
+    const factor = Math.pow(10, decimals);
+    return Math.round(val * factor) / factor;
+  };
+
   return {
     // Base data
-    baseRevenue: revenue,
+    baseRevenue: Math.round(revenue), // Round to integer for millions
     projectionYears: 5,
 
     // Income Statement
-    revenueGrowthRate: metrics.revenueGrowthRate ?? 8, // Default 8% if unknown
-    cogsPercent: Math.min(95, Math.max(20, metrics.cogsPercent)), // Clamp to reasonable range
-    sgaPercent: Math.min(50, Math.max(5, metrics.sgaPercent)),
-    taxRate: Math.min(40, Math.max(10, metrics.effectiveTaxRate)),
+    revenueGrowthRate: round(metrics.revenueGrowthRate ?? 8), // Default 8% if unknown
+    cogsPercent: round(Math.min(95, Math.max(20, metrics.cogsPercent))), // Clamp to reasonable range
+    sgaPercent: round(Math.min(50, Math.max(5, metrics.sgaPercent))),
+    taxRate: round(Math.min(40, Math.max(10, metrics.effectiveTaxRate))),
 
     // Balance Sheet / Working Capital
-    daysReceivables: Math.min(120, Math.max(15, metrics.daysReceivables)),
-    daysInventory: Math.min(180, Math.max(0, metrics.daysInventory)),
-    daysPayables: Math.min(120, Math.max(10, metrics.daysPayables)),
+    daysReceivables: Math.round(Math.min(120, Math.max(15, metrics.daysReceivables))),
+    daysInventory: Math.round(Math.min(180, Math.max(0, metrics.daysInventory))),
+    daysPayables: Math.round(Math.min(120, Math.max(10, metrics.daysPayables))),
 
     // CapEx & Depreciation
-    capexPercent: metrics.capexPercent ?? 5,
-    depreciationYears: Math.min(30, Math.max(3, depreciationYears)),
+    capexPercent: round(metrics.capexPercent ?? 5),
+    depreciationYears: Math.round(Math.min(30, Math.max(3, depreciationYears))),
 
     // Debt
-    debtBalance: data.totalDebt || 0,
-    interestRate: Math.min(15, Math.max(1, metrics.interestRate)),
-    yearlyRepayment,
+    debtBalance: Math.round(data.totalDebt || 0),
+    interestRate: round(Math.min(15, Math.max(1, metrics.interestRate))),
+    yearlyRepayment: Math.round(yearlyRepayment),
 
     // Valuation
     wacc: 10, // Default - user should adjust
     terminalGrowthRate: 2.5, // Default long-term growth
-    sharesOutstanding: data.sharesOutstandingDiluted || data.sharesOutstandingBasic || 100000000,
-    netDebt,
+    sharesOutstanding: Math.round(data.sharesOutstandingDiluted || data.sharesOutstandingBasic || 100000000),
+    netDebt: Math.round(netDebt),
   };
 }
 

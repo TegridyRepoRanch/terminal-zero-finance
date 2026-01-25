@@ -1,8 +1,7 @@
 // Sidebar - Assumptions Input Panel
 import { useState } from 'react';
 import { useFinanceStore } from '../store/useFinanceStore';
-import { formatCurrency } from '../lib/financial-logic';
-import { RefreshCw, TrendingUp, Building2, DollarSign, Calculator, Percent, AlertTriangle, Download, X } from 'lucide-react';
+import { RefreshCw, TrendingUp, Building2, DollarSign, Calculator, Percent, AlertTriangle, Download, X, BarChart3 } from 'lucide-react';
 
 interface InputFieldProps {
     label: string;
@@ -13,9 +12,13 @@ interface InputFieldProps {
     step?: number;
     min?: number;
     max?: number;
+    decimals?: number;
 }
 
-function InputField({ label, value, onChange, suffix, prefix, step = 1, min, max }: InputFieldProps) {
+function InputField({ label, value, onChange, suffix, prefix, step = 1, min, max, decimals = 2 }: InputFieldProps) {
+    // Format value for display - avoids 6.42551178%
+    const displayValue = Number(value).toFixed(decimals);
+
     return (
         <div className="flex items-center justify-between py-2 border-b border-zinc-800/50 group hover:bg-zinc-900/30 px-2 -mx-2 rounded">
             <span className="text-zinc-400 text-xs uppercase tracking-wider">{label}</span>
@@ -23,12 +26,20 @@ function InputField({ label, value, onChange, suffix, prefix, step = 1, min, max
                 {prefix && <span className="text-zinc-500 text-sm">{prefix}</span>}
                 <input
                     type="number"
-                    value={value}
-                    onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+                    // Use key to force re-render if value changes externally (precision fix)
+                    key={`${value}-${decimals}`}
+                    defaultValue={displayValue}
+                    onBlur={(e) => onChange(parseFloat(e.target.value) || 0)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            onChange(parseFloat(e.currentTarget.value) || 0);
+                            e.currentTarget.blur();
+                        }
+                    }}
                     step={step}
                     min={min}
                     max={max}
-                    className="w-20 bg-transparent text-right text-emerald-400 font-mono text-sm
+                    className="w-24 bg-transparent text-right text-emerald-400 font-mono text-sm 
                      border-b border-transparent focus:border-emerald-500 focus:outline-none
                      group-hover:border-zinc-700 transition-colors"
                 />
@@ -120,6 +131,7 @@ export function Sidebar() {
         resetToDefaults,
         valuation,
         company,
+        setCompany,
         incomeStatement,
         balanceSheet,
         cashFlow,
@@ -171,6 +183,22 @@ export function Sidebar() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    };
+
+    // Update market price manually
+    const handlePriceChange = (price: number) => {
+        if (company) {
+            setCompany({ ...company, marketPrice: price });
+        } else {
+            setCompany({
+                ticker: 'UNKNOWN',
+                name: 'Manual Entry',
+                sector: 'General',
+                marketPrice: price,
+                marketCap: 0,
+                lastUpdated: new Date()
+            });
+        }
     };
 
     // Validate assumptions
@@ -241,30 +269,53 @@ export function Sidebar() {
 
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto p-4">
+                <Section title="Market Data" icon={<BarChart3 size={14} />}>
+                    <InputField
+                        label="Share Price"
+                        value={company?.marketPrice || 0}
+                        onChange={handlePriceChange}
+                        prefix="$"
+                        step={0.01}
+                        decimals={2}
+                    />
+                    <InputField
+                        label="Shares Out"
+                        value={assumptions.sharesOutstanding}
+                        onChange={(v) => updateAssumption('sharesOutstanding', v)}
+                        suffix="sh"
+                        step={1000000}
+                        decimals={0}
+                    />
+                </Section>
+
                 <Section title="Revenue Drivers" icon={<TrendingUp size={14} />}>
                     <InputField
                         label="Base Revenue"
-                        value={assumptions.baseRevenue / 1e6}
-                        onChange={(v) => updateAssumption('baseRevenue', v * 1e6)}
+                        value={assumptions.baseRevenue}
+                        onChange={(v) => updateAssumption('baseRevenue', v)}
                         prefix="$"
-                        suffix="M"
-                        step={10}
+                        step={1000000}
+                        decimals={0}
                     />
                     <InputField
                         label="Revenue Growth"
                         value={assumptions.revenueGrowthRate}
                         onChange={(v) => updateAssumption('revenueGrowthRate', v)}
                         suffix="%"
-                        step={0.5}
+                        step={0.1}
+                        min={-50}
+                        max={100}
+                        decimals={1}
                     />
                     <InputField
                         label="Projection Years"
                         value={assumptions.projectionYears}
-                        onChange={(v) => updateAssumption('projectionYears', Math.max(1, Math.min(10, v)))}
+                        onChange={(v) => updateAssumption('projectionYears', v)}
                         suffix="yrs"
                         step={1}
-                        min={1}
+                        min={3}
                         max={10}
+                        decimals={0}
                     />
                 </Section>
 
@@ -274,21 +325,30 @@ export function Sidebar() {
                         value={assumptions.cogsPercent}
                         onChange={(v) => updateAssumption('cogsPercent', v)}
                         suffix="%"
-                        step={1}
+                        step={0.1}
+                        min={0}
+                        max={100}
+                        decimals={1}
                     />
                     <InputField
                         label="SG&A"
                         value={assumptions.sgaPercent}
                         onChange={(v) => updateAssumption('sgaPercent', v)}
                         suffix="%"
-                        step={1}
+                        step={0.1}
+                        min={0}
+                        max={100}
+                        decimals={1}
                     />
                     <InputField
                         label="Tax Rate"
                         value={assumptions.taxRate}
                         onChange={(v) => updateAssumption('taxRate', v)}
                         suffix="%"
-                        step={1}
+                        step={0.1}
+                        min={0}
+                        max={50}
+                        decimals={1}
                     />
                 </Section>
 
@@ -298,110 +358,105 @@ export function Sidebar() {
                         value={assumptions.daysReceivables}
                         onChange={(v) => updateAssumption('daysReceivables', v)}
                         suffix="days"
-                        step={1}
+                        decimals={0}
                     />
                     <InputField
                         label="Days Inventory"
                         value={assumptions.daysInventory}
                         onChange={(v) => updateAssumption('daysInventory', v)}
                         suffix="days"
-                        step={1}
+                        decimals={0}
                     />
                     <InputField
                         label="Days Payables"
                         value={assumptions.daysPayables}
                         onChange={(v) => updateAssumption('daysPayables', v)}
                         suffix="days"
-                        step={1}
+                        decimals={0}
                     />
                 </Section>
 
-                <Section title="CapEx & D&A" icon={<Building2 size={14} />}>
+                <Section title="CapEx & D&A" icon={<Calculator size={14} />}>
                     <InputField
                         label="CapEx % Revenue"
                         value={assumptions.capexPercent}
                         onChange={(v) => updateAssumption('capexPercent', v)}
                         suffix="%"
-                        step={0.5}
+                        step={0.1}
+                        decimals={1}
                     />
                     <InputField
                         label="Depreciation Life"
                         value={assumptions.depreciationYears}
-                        onChange={(v) => updateAssumption('depreciationYears', Math.max(1, v))}
+                        onChange={(v) => updateAssumption('depreciationYears', v)}
                         suffix="yrs"
                         step={1}
+                        decimals={0}
                     />
                 </Section>
 
-                <Section title="Debt Schedule" icon={<Calculator size={14} />}>
+                <Section title="Debt Schedule" icon={<Percent size={14} />}>
                     <InputField
                         label="Debt Balance"
-                        value={assumptions.debtBalance / 1e6}
-                        onChange={(v) => updateAssumption('debtBalance', v * 1e6)}
+                        value={assumptions.debtBalance}
+                        onChange={(v) => updateAssumption('debtBalance', v)}
                         prefix="$"
-                        suffix="M"
-                        step={10}
+                        step={1000000}
+                        decimals={0}
                     />
                     <InputField
                         label="Interest Rate"
                         value={assumptions.interestRate}
                         onChange={(v) => updateAssumption('interestRate', v)}
                         suffix="%"
-                        step={0.25}
+                        step={0.1}
+                        decimals={1}
                     />
                     <InputField
                         label="Yearly Repayment"
-                        value={assumptions.yearlyRepayment / 1e6}
-                        onChange={(v) => updateAssumption('yearlyRepayment', v * 1e6)}
+                        value={assumptions.yearlyRepayment}
+                        onChange={(v) => updateAssumption('yearlyRepayment', v)}
                         prefix="$"
-                        suffix="M"
-                        step={5}
+                        step={1000000}
+                        decimals={0}
                     />
                 </Section>
 
-                <Section title="Valuation Inputs" icon={<Percent size={14} />}>
+                <Section title="Valuation" icon={<Calculator size={14} />}>
                     <InputField
                         label="WACC"
                         value={assumptions.wacc}
                         onChange={(v) => updateAssumption('wacc', v)}
                         suffix="%"
-                        step={0.5}
+                        step={0.1}
+                        decimals={1}
                     />
                     <InputField
                         label="Terminal Growth"
                         value={assumptions.terminalGrowthRate}
                         onChange={(v) => updateAssumption('terminalGrowthRate', v)}
                         suffix="%"
-                        step={0.25}
+                        step={0.1}
+                        decimals={1}
                     />
                     <InputField
-                        label="Net Debt"
-                        value={assumptions.netDebt / 1e6}
-                        onChange={(v) => updateAssumption('netDebt', v * 1e6)}
+                        label="Net Debt (for EV)"
+                        value={assumptions.netDebt}
+                        onChange={(v) => updateAssumption('netDebt', v)}
                         prefix="$"
-                        suffix="M"
-                        step={10}
-                    />
-                    <InputField
-                        label="Shares Outstanding"
-                        value={assumptions.sharesOutstanding / 1e6}
-                        onChange={(v) => updateAssumption('sharesOutstanding', v * 1e6)}
-                        suffix="M"
-                        step={1}
+                        step={1000000}
+                        decimals={0}
                     />
                 </Section>
             </div>
 
-            {/* Footer with key output */}
-            <div className="p-4 border-t border-zinc-800 bg-gradient-to-t from-zinc-900 to-transparent">
-                <div className="text-center">
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Implied Share Price</p>
-                    <p className="text-3xl font-bold text-emerald-400 font-mono animate-pulse-glow">
-                        ${valuation.impliedSharePrice.toFixed(2)}
-                    </p>
-                    <p className="text-xs text-zinc-600 mt-1">
-                        EV: {formatCurrency(valuation.enterpriseValue)}
-                    </p>
+            {/* Footer */}
+            <div className="p-4 border-t border-zinc-800 bg-zinc-900/30">
+                <div className="flex justify-between items-center text-xs text-zinc-500">
+                    <span>v1.0.0</span>
+                    {company?.lastUpdated && (
+                        <span>Updated: {new Date(company.lastUpdated).toLocaleDateString()}</span>
+                    )}
                 </div>
             </div>
 
