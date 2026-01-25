@@ -1,12 +1,11 @@
 // PDF Text Extraction using PDF.js
+// Lazy-loaded to reduce initial bundle size
 
-import * as pdfjsLib from 'pdfjs-dist';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
-// Configure worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).toString();
+interface TextItem {
+  str: string;
+}
 
 export interface PDFParseResult {
   text: string;
@@ -25,6 +24,29 @@ export interface PDFParseProgress {
   percent: number;
 }
 
+// Lazy-loaded PDF.js module
+let pdfjsModule: typeof import('pdfjs-dist') | null = null;
+
+/**
+ * Lazily load PDF.js module
+ */
+async function getPDFJS(): Promise<typeof import('pdfjs-dist')> {
+  if (pdfjsModule) {
+    return pdfjsModule;
+  }
+
+  // Dynamic import - this creates a separate chunk
+  pdfjsModule = await import('pdfjs-dist');
+
+  // Configure worker after module is loaded
+  pdfjsModule.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).toString();
+
+  return pdfjsModule;
+}
+
 /**
  * Extract text content from a PDF file
  * @param file - The PDF file to parse
@@ -35,6 +57,8 @@ export async function extractTextFromPDF(
   file: File,
   onProgress?: (progress: PDFParseProgress) => void
 ): Promise<PDFParseResult> {
+  const pdfjsLib = await getPDFJS();
+
   // Convert File to ArrayBuffer
   const arrayBuffer = await file.arrayBuffer();
 
@@ -46,7 +70,7 @@ export async function extractTextFromPDF(
     useSystemFonts: true,
   });
 
-  const pdf = await loadingTask.promise;
+  const pdf: PDFDocumentProxy = await loadingTask.promise;
   const pageCount = pdf.numPages;
 
   // Extract metadata
@@ -64,7 +88,7 @@ export async function extractTextFromPDF(
     const pageText = textContent.items
       .map((item) => {
         if ('str' in item) {
-          return item.str;
+          return (item as TextItem).str;
         }
         return '';
       })
@@ -115,6 +139,7 @@ export async function extractTextFromPages(
   startPage: number,
   endPage: number
 ): Promise<string> {
+  const pdfjsLib = await getPDFJS();
   const arrayBuffer = await file.arrayBuffer();
 
   const loadingTask = pdfjsLib.getDocument({
@@ -124,7 +149,7 @@ export async function extractTextFromPages(
     useSystemFonts: true,
   });
 
-  const pdf = await loadingTask.promise;
+  const pdf: PDFDocumentProxy = await loadingTask.promise;
   const actualEndPage = Math.min(endPage, pdf.numPages);
 
   const textParts: string[] = [];
@@ -134,7 +159,7 @@ export async function extractTextFromPages(
     const textContent = await page.getTextContent();
 
     const pageText = textContent.items
-      .map((item) => ('str' in item ? item.str : ''))
+      .map((item) => ('str' in item ? (item as TextItem).str : ''))
       .join(' ');
 
     textParts.push(pageText);
@@ -149,6 +174,7 @@ export async function extractTextFromPages(
  * Get the number of pages in a PDF without extracting text
  */
 export async function getPDFPageCount(file: File): Promise<number> {
+  const pdfjsLib = await getPDFJS();
   const arrayBuffer = await file.arrayBuffer();
 
   const loadingTask = pdfjsLib.getDocument({
@@ -157,7 +183,7 @@ export async function getPDFPageCount(file: File): Promise<number> {
     isEvalSupported: false,
   });
 
-  const pdf = await loadingTask.promise;
+  const pdf: PDFDocumentProxy = await loadingTask.promise;
   const pageCount = pdf.numPages;
 
   await pdf.destroy();

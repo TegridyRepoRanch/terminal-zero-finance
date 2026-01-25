@@ -1,6 +1,149 @@
 // Terminal Zero - Financial Logic Engine
 // All pure calculation functions for DCF valuation
 
+import { VALIDATION_LIMITS } from './constants';
+
+// =============================================================================
+// INPUT VALIDATION
+// =============================================================================
+
+export interface ValidationWarning {
+    field: string;
+    message: string;
+    severity: 'low' | 'medium' | 'high';
+}
+
+/**
+ * Validate assumptions and return warnings for problematic values
+ */
+export function validateAssumptionsInput(assumptions: Assumptions): ValidationWarning[] {
+    const warnings: ValidationWarning[] = [];
+
+    // Revenue validation
+    if (assumptions.baseRevenue <= 0) {
+        warnings.push({
+            field: 'baseRevenue',
+            message: 'Base revenue must be positive',
+            severity: 'high',
+        });
+    }
+
+    // Growth rate validation
+    if (assumptions.revenueGrowthRate > VALIDATION_LIMITS.GROWTH_WARNING_HIGH) {
+        warnings.push({
+            field: 'revenueGrowthRate',
+            message: `Growth rate of ${assumptions.revenueGrowthRate}% may be unsustainable`,
+            severity: 'medium',
+        });
+    }
+    if (assumptions.revenueGrowthRate < VALIDATION_LIMITS.GROWTH_MIN) {
+        warnings.push({
+            field: 'revenueGrowthRate',
+            message: 'Significant decline in revenue projected',
+            severity: 'high',
+        });
+    }
+
+    // COGS validation
+    if (assumptions.cogsPercent > VALIDATION_LIMITS.COGS_WARNING_HIGH) {
+        warnings.push({
+            field: 'cogsPercent',
+            message: `COGS of ${assumptions.cogsPercent}% leaves very thin margins`,
+            severity: 'medium',
+        });
+    }
+    if (assumptions.cogsPercent < VALIDATION_LIMITS.COGS_WARNING_LOW) {
+        warnings.push({
+            field: 'cogsPercent',
+            message: `COGS of ${assumptions.cogsPercent}% is unusually low (typical for software)`,
+            severity: 'low',
+        });
+    }
+
+    // Tax rate validation
+    if (assumptions.taxRate < VALIDATION_LIMITS.TAX_WARNING_LOW || assumptions.taxRate > VALIDATION_LIMITS.TAX_WARNING_HIGH) {
+        warnings.push({
+            field: 'taxRate',
+            message: `Effective tax rate of ${assumptions.taxRate}% is unusual - may have one-time items`,
+            severity: 'low',
+        });
+    }
+
+    // Working capital validation
+    if (assumptions.daysReceivables > VALIDATION_LIMITS.DSO_WARNING) {
+        warnings.push({
+            field: 'daysReceivables',
+            message: `DSO of ${assumptions.daysReceivables} days may indicate collection issues`,
+            severity: 'medium',
+        });
+    }
+    if (assumptions.daysPayables > VALIDATION_LIMITS.DPO_WARNING) {
+        warnings.push({
+            field: 'daysPayables',
+            message: `DPO of ${assumptions.daysPayables} days indicates stretched payables`,
+            severity: 'low',
+        });
+    }
+
+    // WACC validation
+    if (assumptions.wacc < VALIDATION_LIMITS.WACC_MIN) {
+        warnings.push({
+            field: 'wacc',
+            message: `WACC of ${assumptions.wacc}% is very low - verify cost of capital`,
+            severity: 'medium',
+        });
+    }
+    if (assumptions.wacc > VALIDATION_LIMITS.WACC_MAX) {
+        warnings.push({
+            field: 'wacc',
+            message: `WACC of ${assumptions.wacc}% is high - reflects significant risk`,
+            severity: 'medium',
+        });
+    }
+
+    // Terminal growth validation
+    if (assumptions.terminalGrowthRate >= assumptions.wacc) {
+        warnings.push({
+            field: 'terminalGrowthRate',
+            message: 'Terminal growth cannot exceed WACC (creates infinite value)',
+            severity: 'high',
+        });
+    }
+
+    return warnings;
+}
+
+/**
+ * Clamp a value within a range
+ */
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Sanitize assumptions to ensure valid calculations
+ */
+export function sanitizeAssumptions(assumptions: Assumptions): Assumptions {
+    return {
+        ...assumptions,
+        baseRevenue: Math.max(0, assumptions.baseRevenue),
+        projectionYears: clamp(assumptions.projectionYears, VALIDATION_LIMITS.MIN_PROJECTION_YEARS, VALIDATION_LIMITS.MAX_PROJECTION_YEARS),
+        revenueGrowthRate: clamp(assumptions.revenueGrowthRate, VALIDATION_LIMITS.GROWTH_MIN, VALIDATION_LIMITS.GROWTH_MAX),
+        cogsPercent: clamp(assumptions.cogsPercent, VALIDATION_LIMITS.COGS_MIN, VALIDATION_LIMITS.COGS_MAX),
+        sgaPercent: clamp(assumptions.sgaPercent, VALIDATION_LIMITS.SGA_MIN, VALIDATION_LIMITS.SGA_MAX),
+        taxRate: clamp(assumptions.taxRate, VALIDATION_LIMITS.TAX_MIN, VALIDATION_LIMITS.TAX_MAX),
+        daysReceivables: clamp(assumptions.daysReceivables, VALIDATION_LIMITS.DSO_MIN, VALIDATION_LIMITS.DSO_MAX),
+        daysInventory: clamp(assumptions.daysInventory, VALIDATION_LIMITS.DIO_MIN, VALIDATION_LIMITS.DIO_MAX),
+        daysPayables: clamp(assumptions.daysPayables, VALIDATION_LIMITS.DPO_MIN, VALIDATION_LIMITS.DPO_MAX),
+        wacc: clamp(assumptions.wacc, VALIDATION_LIMITS.WACC_MIN, VALIDATION_LIMITS.WACC_MAX),
+        terminalGrowthRate: clamp(assumptions.terminalGrowthRate, VALIDATION_LIMITS.TERMINAL_GROWTH_MIN, Math.min(VALIDATION_LIMITS.TERMINAL_GROWTH_MAX, assumptions.wacc - 0.5)),
+    };
+}
+
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
+
 export interface Assumptions {
     // Base data
     baseRevenue: number;

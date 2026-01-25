@@ -1,5 +1,5 @@
-// Gemini 2.5 Pro Client for Advanced SEC Filing Analysis
-// Used for: Complex segments, MD&A analysis, tricky tables, validation
+// Gemini Client for SEC Filing Analysis
+// Uses Gemini 2.5 Pro/Flash for financial data extraction
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type {
@@ -7,163 +7,18 @@ import type {
   ExtractionConfidence,
   LLMExtractionResponse,
 } from './extraction-types';
+import { GEMINI_MODELS, GEMINI_CONFIG } from './constants';
+import {
+  SEGMENT_EXTRACTION_PROMPT,
+  MDA_ANALYSIS_PROMPT,
+  TABLE_EXTRACTION_PROMPT,
+  FINANCIAL_EXTRACTION_PROMPT,
+  buildValidationPrompt,
+} from './prompts';
 
-// Segment breakdown extraction prompt
-const SEGMENT_EXTRACTION_PROMPT = `You are an expert financial analyst. Extract detailed segment/business unit breakdowns from this SEC filing.
-
-Return a JSON object with:
-{
-  "segments": [
-    {
-      "name": "Segment name",
-      "revenue": number,
-      "operatingIncome": number,
-      "assets": number,
-      "revenuePercent": number (% of total),
-      "growthRate": number or null (YoY %),
-      "geography": "string or null",
-      "description": "Brief description of segment"
-    }
-  ],
-  "totalRevenue": number,
-  "revenueByGeography": {
-    "region": number
-  },
-  "notes": ["Any important observations about segment reporting"]
-}
-
-Be thorough - SEC filings often have segment data in multiple places (Item 1, Item 7, notes to financials).
-
-Filing text:
-`;
-
-// MD&A qualitative analysis prompt
-const MDA_ANALYSIS_PROMPT = `You are an expert financial analyst. Perform qualitative analysis of the Management Discussion & Analysis (MD&A) section.
-
-Return a JSON object with:
-{
-  "keyThemes": [
-    {
-      "theme": "string",
-      "sentiment": "positive" | "negative" | "neutral",
-      "significance": "high" | "medium" | "low",
-      "quote": "Relevant quote from filing"
-    }
-  ],
-  "risks": [
-    {
-      "risk": "Description",
-      "category": "operational" | "financial" | "regulatory" | "market" | "other",
-      "severity": "high" | "medium" | "low",
-      "newOrEscalated": boolean
-    }
-  ],
-  "guidance": {
-    "hasGuidance": boolean,
-    "revenueGuidance": "string or null",
-    "marginGuidance": "string or null",
-    "capitalAllocation": "string or null",
-    "otherGuidance": ["strings"]
-  },
-  "competitivePosition": {
-    "strengths": ["strings"],
-    "weaknesses": ["strings"],
-    "marketTrends": ["strings"]
-  },
-  "managementTone": "optimistic" | "cautious" | "concerned" | "neutral",
-  "summary": "2-3 sentence executive summary"
-}
-
-Filing text:
-`;
-
-// Complex table extraction prompt
-const TABLE_EXTRACTION_PROMPT = `You are an expert at extracting financial data from complex tables in SEC filings.
-
-The following text may contain poorly formatted tables. Extract ALL numerical financial data accurately.
-
-Pay special attention to:
-- Multi-year comparative data
-- Footnotes that modify reported numbers
-- Pro-forma vs GAAP figures (prefer GAAP)
-- Numbers in thousands vs millions (convert all to actual dollars)
-- Negative numbers shown in parentheses
-
-Return a JSON object with:
-{
-  "financials": {
-    // Same structure as main extraction - fill in what you can find
-    "revenue": number,
-    "costOfRevenue": number,
-    "grossProfit": number,
-    "operatingExpenses": number,
-    "sgaExpense": number or null,
-    "rdExpense": number or null,
-    "depreciationAmortization": number,
-    "operatingIncome": number,
-    "interestExpense": number,
-    "incomeBeforeTax": number,
-    "incomeTaxExpense": number,
-    "netIncome": number,
-    "totalCurrentAssets": number,
-    "accountsReceivable": number,
-    "inventory": number,
-    "totalAssets": number,
-    "propertyPlantEquipment": number,
-    "totalCurrentLiabilities": number,
-    "accountsPayable": number,
-    "totalDebt": number,
-    "shortTermDebt": number,
-    "longTermDebt": number,
-    "totalLiabilities": number,
-    "totalEquity": number,
-    "cashAndEquivalents": number,
-    "sharesOutstandingBasic": number,
-    "sharesOutstandingDiluted": number
-  },
-  "tableNotes": ["Any footnotes or adjustments found"],
-  "dataQuality": {
-    "confidence": 0.0-1.0,
-    "issues": ["Any data quality issues encountered"]
-  }
-}
-
-Filing text:
-`;
-
-// Validation prompt - compares two extractions
-const VALIDATION_PROMPT = `You are a senior financial analyst performing a final validation of extracted SEC filing data.
-
-Compare the two extractions below and identify any discrepancies. For each discrepancy, determine which value is more likely correct based on typical financial reporting patterns.
-
-Extraction 1 (GPT-4):
-{extraction1}
-
-Extraction 2 (Gemini):
-{extraction2}
-
-Return a JSON object with:
-{
-  "validated": {
-    // Final validated values - use the most accurate from either extraction
-    // Same structure as ExtractedFinancials
-  },
-  "discrepancies": [
-    {
-      "field": "field name",
-      "gptValue": number,
-      "geminiValue": number,
-      "selectedValue": number,
-      "reason": "Why this value was selected"
-    }
-  ],
-  "confidence": {
-    // Confidence scores for each field
-  },
-  "validationNotes": ["Any important observations from validation"],
-  "overallConfidence": 0.0-1.0
-}
-`;
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
 
 export interface SegmentData {
   name: string;
@@ -218,8 +73,8 @@ export interface ValidationResult {
   validated: ExtractedFinancials;
   discrepancies: Array<{
     field: string;
-    gptValue: number;
-    geminiValue: number;
+    primaryValue: number;
+    verificationValue: number;
     selectedValue: number;
     reason: string;
   }>;
@@ -228,37 +83,68 @@ export interface ValidationResult {
   overallConfidence: number;
 }
 
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
 /**
- * Initialize Gemini client
+ * Initialize Gemini client with API key
  */
 function getGeminiClient(apiKey: string) {
   return new GoogleGenerativeAI(apiKey);
 }
 
 /**
- * Extract segment breakdowns using Gemini 2.5 Pro
+ * Get display name for a model ID
+ */
+function getModelDisplayName(modelId: string): string {
+  if (modelId === GEMINI_MODELS.FLASH) return 'Gemini 2.5 Flash';
+  if (modelId === GEMINI_MODELS.PRO) return 'Gemini 2.5 Pro';
+  return modelId;
+}
+
+/**
+ * Safe JSON parse with error context
+ */
+function safeParseJSON<T>(response: string, context: string): T {
+  try {
+    return JSON.parse(response) as T;
+  } catch (parseError) {
+    console.error(`[Gemini] JSON parse error in ${context}:`, parseError);
+    console.error('[Gemini] Raw response (first 500 chars):', response.substring(0, 500));
+    throw new Error(`Failed to parse ${context} response: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
+  }
+}
+
+// =============================================================================
+// EXTRACTION FUNCTIONS
+// =============================================================================
+
+/**
+ * Extract segment breakdowns using Gemini Pro
  */
 export async function extractSegmentsWithGemini(
   text: string,
   apiKey: string,
   onProgress?: (message: string) => void
 ): Promise<SegmentAnalysis> {
-  onProgress?.('Analyzing business segments with Gemini 2.5 Pro...');
+  const modelId = GEMINI_MODELS.PRO;
+  onProgress?.(`Analyzing business segments with ${getModelDisplayName(modelId)}...`);
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+  const model = genAI.getGenerativeModel({ model: modelId });
 
   try {
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: SEGMENT_EXTRACTION_PROMPT + text }] }],
       generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
+        temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
       },
     });
 
     const response = result.response.text();
-    return JSON.parse(response) as SegmentAnalysis;
+    return safeParseJSON<SegmentAnalysis>(response, 'segment extraction');
   } catch (error) {
     console.error('[Gemini] Segment extraction error:', error);
     throw new Error(`Segment extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -266,29 +152,30 @@ export async function extractSegmentsWithGemini(
 }
 
 /**
- * Perform MD&A qualitative analysis using Gemini 2.5 Pro
+ * Perform MD&A qualitative analysis using Gemini Pro
  */
 export async function analyzeMDAWithGemini(
   text: string,
   apiKey: string,
   onProgress?: (message: string) => void
 ): Promise<MDAanalysis> {
-  onProgress?.('Analyzing MD&A section with Gemini 2.5 Pro...');
+  const modelId = GEMINI_MODELS.PRO;
+  onProgress?.(`Analyzing MD&A section with ${getModelDisplayName(modelId)}...`);
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+  const model = genAI.getGenerativeModel({ model: modelId });
 
   try {
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: MDA_ANALYSIS_PROMPT + text }] }],
       generationConfig: {
-        temperature: 0.2,
-        responseMimeType: 'application/json',
+        temperature: GEMINI_CONFIG.TEMPERATURE_ANALYSIS,
+        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
       },
     });
 
     const response = result.response.text();
-    return JSON.parse(response) as MDAanalysis;
+    return safeParseJSON<MDAanalysis>(response, 'MD&A analysis');
   } catch (error) {
     console.error('[Gemini] MD&A analysis error:', error);
     throw new Error(`MD&A analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -296,25 +183,26 @@ export async function analyzeMDAWithGemini(
 }
 
 /**
- * Extract data from complex/tricky tables using Gemini 2.5 Pro
+ * Extract data from complex/tricky tables using Gemini Pro
  */
 export async function extractTablesWithGemini(
   text: string,
   apiKey: string,
   onProgress?: (message: string) => void
 ): Promise<LLMExtractionResponse> {
-  onProgress?.('Extracting complex tables with Gemini 2.5 Pro...');
+  const modelId = GEMINI_MODELS.PRO;
+  onProgress?.(`Extracting complex tables with ${getModelDisplayName(modelId)}...`);
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+  const model = genAI.getGenerativeModel({ model: modelId });
 
   let response: string;
   try {
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: TABLE_EXTRACTION_PROMPT + text }] }],
       generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
+        temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
       },
     });
     response = result.response.text();
@@ -323,7 +211,11 @@ export async function extractTablesWithGemini(
     throw new Error(`Table extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
-  const parsed = JSON.parse(response);
+  const parsed = safeParseJSON<{
+    financials: Partial<ExtractedFinancials>;
+    tableNotes?: string[];
+    dataQuality?: { confidence?: number; issues?: string[] };
+  }>(response, 'table extraction');
 
   // Transform to standard LLMExtractionResponse format
   return {
@@ -361,39 +253,41 @@ export async function extractTablesWithGemini(
 }
 
 /**
- * Validate extraction by comparing GPT-4 and Gemini results
+ * Validate extraction by comparing two extraction passes
  */
 export async function validateExtractionWithGemini(
-  gptExtraction: LLMExtractionResponse,
+  primaryExtraction: LLMExtractionResponse,
   text: string,
   apiKey: string,
   onProgress?: (message: string) => void
 ): Promise<ValidationResult> {
-  onProgress?.('Running validation pass with Gemini 2.5 Pro...');
+  const modelId = GEMINI_MODELS.PRO;
+  onProgress?.(`Running validation pass with ${getModelDisplayName(modelId)}...`);
 
-  // First, get Gemini's own extraction
-  const geminiExtraction = await extractTablesWithGemini(text, apiKey);
+  // First, get a second extraction for comparison
+  const verificationExtraction = await extractTablesWithGemini(text, apiKey);
 
   onProgress?.('Comparing extractions and resolving discrepancies...');
 
   const genAI = getGeminiClient(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+  const model = genAI.getGenerativeModel({ model: modelId });
 
-  const prompt = VALIDATION_PROMPT
-    .replace('{extraction1}', JSON.stringify(gptExtraction.financials, null, 2))
-    .replace('{extraction2}', JSON.stringify(geminiExtraction.financials, null, 2));
+  const prompt = buildValidationPrompt(
+    JSON.stringify(primaryExtraction.financials, null, 2),
+    JSON.stringify(verificationExtraction.financials, null, 2)
+  );
 
   try {
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
+        temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
       },
     });
 
     const response = result.response.text();
-    return JSON.parse(response) as ValidationResult;
+    return safeParseJSON<ValidationResult>(response, 'validation');
   } catch (error) {
     console.error('[Gemini] Validation error:', error);
     throw new Error(`Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -401,8 +295,11 @@ export async function validateExtractionWithGemini(
 }
 
 /**
- * Full Gemini extraction
- * @param useFlash - If true, uses Gemini 2.5 Flash (faster). If false, uses Gemini 2.5 Pro (more accurate).
+ * Full financial extraction from SEC filing
+ * @param text - The filing text to extract from
+ * @param apiKey - Gemini API key
+ * @param onProgress - Optional progress callback
+ * @param useFlash - If true, uses Gemini Flash (faster). If false, uses Gemini Pro (more accurate).
  */
 export async function extractFinancialsWithGemini(
   text: string,
@@ -410,101 +307,30 @@ export async function extractFinancialsWithGemini(
   onProgress?: (message: string) => void,
   useFlash: boolean = false
 ): Promise<LLMExtractionResponse> {
-  const modelName = useFlash ? 'Gemini 2.5 Flash' : 'Gemini 2.5 Pro';
+  const modelId = useFlash ? GEMINI_MODELS.FLASH : GEMINI_MODELS.PRO;
+  const modelName = getModelDisplayName(modelId);
+
   onProgress?.(`Extracting financials with ${modelName}...`);
-
-  const FULL_EXTRACTION_PROMPT = `You are a financial analyst AI. Extract key financial data from the following SEC 10-K or 10-Q filing.
-
-Return a JSON object with the following structure. Use numbers only (no currency symbols or commas). Use null for any values you cannot find. All monetary values should be in dollars (not thousands or millions - convert if needed).
-
-{
-  "financials": {
-    "companyName": "string",
-    "ticker": "string or null",
-    "filingType": "10-K" | "10-Q" | "unknown",
-    "fiscalYear": number,
-    "fiscalPeriod": "string",
-    "revenue": number,
-    "costOfRevenue": number,
-    "grossProfit": number,
-    "operatingExpenses": number,
-    "sgaExpense": number or null,
-    "rdExpense": number or null,
-    "depreciationAmortization": number,
-    "operatingIncome": number,
-    "interestExpense": number,
-    "incomeBeforeTax": number,
-    "incomeTaxExpense": number,
-    "netIncome": number,
-    "totalCurrentAssets": number,
-    "accountsReceivable": number,
-    "inventory": number,
-    "totalAssets": number,
-    "propertyPlantEquipment": number,
-    "totalCurrentLiabilities": number,
-    "accountsPayable": number,
-    "totalDebt": number,
-    "shortTermDebt": number,
-    "longTermDebt": number,
-    "totalLiabilities": number,
-    "totalEquity": number,
-    "retainedEarnings": number,
-    "cashAndEquivalents": number,
-    "sharesOutstandingBasic": number,
-    "sharesOutstandingDiluted": number,
-    "priorYearRevenue": number or null,
-    "extractionNotes": []
-  },
-  "confidence": {
-    "companyName": 0.0-1.0,
-    "revenue": 0.0-1.0,
-    "costOfRevenue": 0.0-1.0,
-    "operatingExpenses": 0.0-1.0,
-    "depreciationAmortization": 0.0-1.0,
-    "interestExpense": 0.0-1.0,
-    "incomeTaxExpense": 0.0-1.0,
-    "accountsReceivable": 0.0-1.0,
-    "inventory": 0.0-1.0,
-    "accountsPayable": 0.0-1.0,
-    "propertyPlantEquipment": 0.0-1.0,
-    "totalDebt": 0.0-1.0,
-    "sharesOutstanding": 0.0-1.0,
-    "overall": 0.0-1.0
-  },
-  "warnings": []
-}
-
-Filing text:
-` + text;
-
-  const genAI = getGeminiClient(apiKey);
-  // Use stable Gemini 2.5 model identifiers
-  const modelId = useFlash ? 'gemini-2.5-flash' : 'gemini-2.5-pro';
   console.log(`[Gemini] Using model: ${modelId}`);
 
+  const genAI = getGeminiClient(apiKey);
   const model = genAI.getGenerativeModel({ model: modelId });
 
   try {
     const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: FULL_EXTRACTION_PROMPT }] }],
+      contents: [{ role: 'user', parts: [{ text: FINANCIAL_EXTRACTION_PROMPT + text }] }],
       generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
+        temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+        responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
       },
     });
 
     const response = result.response.text();
     console.log(`[Gemini] Response received, length: ${response.length}`);
 
-    try {
-      return JSON.parse(response) as LLMExtractionResponse;
-    } catch (parseError) {
-      console.error('[Gemini] JSON parse error:', parseError);
-      console.error('[Gemini] Raw response:', response.substring(0, 500));
-      throw new Error(`Failed to parse Gemini response: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
-    }
-  } catch (apiError) {
-    console.error('[Gemini] API error:', apiError);
-    throw new Error(`Gemini API error: ${apiError instanceof Error ? apiError.message : 'Unknown API error'}`);
+    return safeParseJSON<LLMExtractionResponse>(response, 'financial extraction');
+  } catch (error) {
+    console.error('[Gemini] API error:', error);
+    throw new Error(`Gemini API error: ${error instanceof Error ? error.message : 'Unknown API error'}`);
   }
 }

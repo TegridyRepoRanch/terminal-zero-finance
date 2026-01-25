@@ -12,10 +12,47 @@ import { DepreciationSchedule } from './components/DepreciationSchedule';
 import { DebtSchedule } from './components/DebtSchedule';
 import { ValuationEngine } from './components/ValuationEngine';
 import { UploadScreen, ProcessingScreen, ReviewScreen } from './components/upload';
+import { AlertTriangle, X } from 'lucide-react';
 import type { Assumptions } from './lib/financial-logic';
 
 // App view states
 type AppView = 'upload' | 'processing' | 'review' | 'model';
+
+// Security Warning Banner - shows in development mode
+function SecurityBanner({ onDismiss }: { onDismiss: () => void }) {
+  const isDev = import.meta.env.DEV;
+
+  if (!isDev) return null;
+
+  return (
+    <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2">
+      <div className="flex items-center justify-between max-w-6xl mx-auto">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+          <p className="text-xs text-amber-300">
+            <span className="font-semibold">Development Mode:</span> API keys are exposed in the browser.
+            For production, use a backend proxy to secure your keys.
+            <a
+              href="https://github.com/TegridyRepoRanch/terminal-zero-finance#security"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 underline hover:text-amber-200"
+            >
+              Learn more
+            </a>
+          </p>
+        </div>
+        <button
+          onClick={onDismiss}
+          className="p-1 text-amber-400 hover:text-amber-200 transition-colors"
+          aria-label="Dismiss warning"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function MainContent() {
   const { activeTab } = useFinanceStore();
@@ -79,6 +116,7 @@ function MainContent() {
 
 export default function App() {
   const [view, setView] = useState<AppView>('upload');
+  const [showSecurityBanner, setShowSecurityBanner] = useState(true);
   const { setAssumptionsFromExtraction } = useFinanceStore();
   const { metadata, reset: resetUpload } = useUploadStore();
 
@@ -116,40 +154,51 @@ export default function App() {
     setView('upload');
   };
 
-  // Render based on current view
-  switch (view) {
-    case 'upload':
-      return (
-        <UploadScreen
-          onFileSelected={handleFileSelected}
-          onSkip={handleSkipToManual}
-        />
-      );
+  // Render content based on current view
+  const renderView = () => {
+    switch (view) {
+      case 'upload':
+        return (
+          <UploadScreen
+            onFileSelected={handleFileSelected}
+            onSkip={handleSkipToManual}
+          />
+        );
 
-    case 'processing':
-      return (
-        <ProcessingScreen
-          onComplete={handleProcessingComplete}
-          onError={handleProcessingError}
-          onCancel={handleProcessingCancel}
-        />
-      );
+      case 'processing':
+        return (
+          <ProcessingScreen
+            onComplete={handleProcessingComplete}
+            onError={handleProcessingError}
+            onCancel={handleProcessingCancel}
+          />
+        );
 
-    case 'review':
-      return (
-        <ReviewScreen
-          onProceed={handleReviewProceed}
-          onBack={handleReviewBack}
-        />
-      );
+      case 'review':
+        return (
+          <ReviewScreen
+            onProceed={handleReviewProceed}
+            onBack={handleReviewBack}
+          />
+        );
 
-    case 'model':
-    default:
-      return (
-        <div className="flex h-screen bg-zinc-950 text-zinc-300">
-          <Sidebar />
-          <MainContent />
-        </div>
-      );
-  }
+      case 'model':
+      default:
+        return (
+          <div className="flex flex-1 overflow-hidden">
+            <Sidebar />
+            <MainContent />
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300">
+      {showSecurityBanner && (
+        <SecurityBanner onDismiss={() => setShowSecurityBanner(false)} />
+      )}
+      {renderView()}
+    </div>
+  );
 }
