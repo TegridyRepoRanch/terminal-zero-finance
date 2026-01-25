@@ -20,24 +20,20 @@ export function FileDropZone({
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const validateFile = (file: File): string | null => {
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      return 'Please upload a PDF file';
-    }
-    if (file.size > maxSize) {
-      return `File too large. Maximum size is ${Math.round(maxSize / 1024 / 1024)}MB`;
-    }
-    return null;
-  };
-
   const handleFile = useCallback(
     (file: File) => {
       setError(null);
-      const validationError = validateFile(file);
-      if (validationError) {
-        setError(validationError);
+
+      // Validate file
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        setError('Please upload a PDF file');
         return;
       }
+      if (file.size > maxSize) {
+        setError(`File too large. Maximum size is ${Math.round(maxSize / 1024 / 1024)}MB`);
+        return;
+      }
+
       onFileSelect(file);
     },
     [onFileSelect, maxSize]

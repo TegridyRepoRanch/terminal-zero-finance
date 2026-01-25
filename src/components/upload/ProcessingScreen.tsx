@@ -149,8 +149,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         currentStep++;
         setProgress(progressForStep(0));
 
-        let finalFinancials = extractionResult.financials;
-        let finalConfidence = extractionResult.confidence;
+        const finalFinancials = extractionResult.financials;
+        const finalConfidence = extractionResult.confidence;
         let allWarnings: ExtractionWarning[] = [...extractionResult.warnings];
 
         // Thorough mode: Add segment and MD&A analysis
@@ -343,7 +343,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
     return () => {
       cancelled = true;
     };
-  }, [file, extractionMode]);
+  }, [file, extractionMode, onComplete, onError, setError, setStatus, setProgress, setExtractedData, setDerivedMetrics, setMetadata, steps.length, startTime]);
 
   const getStepIcon = (step: ProcessingStep) => {
     const { status, model } = step;

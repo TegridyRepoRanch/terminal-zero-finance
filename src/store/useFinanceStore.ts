@@ -1,7 +1,8 @@
 // Terminal Zero - Global Finance Store
-// Zustand state management with reactive calculations
+// Zustand state management with reactive calculations and localStorage persistence
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import {
     defaultAssumptions,
     calculateAllSchedules,
@@ -83,64 +84,88 @@ function recalculate(assumptions: Assumptions) {
 
 const initialCalcs = recalculate(defaultAssumptions);
 
-export const useFinanceStore = create<FinanceState>((set) => ({
-    company: null,
-    searchQuery: '',
-    assumptions: defaultAssumptions,
-    ...initialCalcs,
-    activeTab: 'valuation',
-    dataSource: 'manual',
-    extractionMetadata: null,
-
-    setCompany: (company) => {
-        set({ company, searchQuery: '' });
-    },
-
-    setSearchQuery: (query) => {
-        set({ searchQuery: query });
-    },
-
-    updateAssumption: (key, value) => {
-        set((state) => {
-            const newAssumptions = { ...state.assumptions, [key]: value };
-            const calcs = recalculate(newAssumptions);
-            return {
-                assumptions: newAssumptions,
-                ...calcs,
-            };
-        });
-    },
-
-    setActiveTab: (tab) => {
-        set({ activeTab: tab });
-    },
-
-    resetToDefaults: () => {
-        const calcs = recalculate(defaultAssumptions);
-        set({
+export const useFinanceStore = create<FinanceState>()(
+    persist(
+        (set) => ({
+            company: null,
+            searchQuery: '',
             assumptions: defaultAssumptions,
-            ...calcs,
+            ...initialCalcs,
+            activeTab: 'valuation',
             dataSource: 'manual',
             extractionMetadata: null,
-        });
-    },
 
-    setAssumptionsFromExtraction: (assumptions, metadata) => {
-        const calcs = recalculate(assumptions);
-        set({
-            assumptions,
-            ...calcs,
-            dataSource: 'extraction',
-            extractionMetadata: metadata,
-            // Create a company entry from extraction metadata
-            company: {
-                ticker: metadata.companyName.split(' ')[0].toUpperCase().slice(0, 4),
-                name: metadata.companyName,
-                sector: 'Unknown',
-                marketPrice: 0,
-                marketCap: 0,
-                lastUpdated: metadata.extractedAt,
+            setCompany: (company) => {
+                set({ company, searchQuery: '' });
             },
-        });
-    },
-}));
+
+            setSearchQuery: (query) => {
+                set({ searchQuery: query });
+            },
+
+            updateAssumption: (key, value) => {
+                set((state) => {
+                    const newAssumptions = { ...state.assumptions, [key]: value };
+                    const calcs = recalculate(newAssumptions);
+                    return {
+                        assumptions: newAssumptions,
+                        ...calcs,
+                    };
+                });
+            },
+
+            setActiveTab: (tab) => {
+                set({ activeTab: tab });
+            },
+
+            resetToDefaults: () => {
+                const calcs = recalculate(defaultAssumptions);
+                set({
+                    assumptions: defaultAssumptions,
+                    ...calcs,
+                    dataSource: 'manual',
+                    extractionMetadata: null,
+                });
+            },
+
+            setAssumptionsFromExtraction: (assumptions, metadata) => {
+                const calcs = recalculate(assumptions);
+                set({
+                    assumptions,
+                    ...calcs,
+                    dataSource: 'extraction',
+                    extractionMetadata: metadata,
+                    // Create a company entry from extraction metadata
+                    company: {
+                        ticker: metadata.companyName.split(' ')[0].toUpperCase().slice(0, 4),
+                        name: metadata.companyName,
+                        sector: 'Unknown',
+                        marketPrice: 0,
+                        marketCap: 0,
+                        lastUpdated: metadata.extractedAt,
+                    },
+                });
+            },
+        }),
+        {
+            name: 'terminal-zero-finance-storage',
+            storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                // Only persist user inputs and company info
+                company: state.company,
+                assumptions: state.assumptions,
+                activeTab: state.activeTab,
+                dataSource: state.dataSource,
+                extractionMetadata: state.extractionMetadata,
+                // Don't persist calculated values - they'll be recalculated on load
+            }),
+            onRehydrateStorage: () => (state) => {
+                // Recalculate all values after loading from storage
+                if (state?.assumptions) {
+                    const calcs = recalculate(state.assumptions);
+                    Object.assign(state, calcs);
+                }
+            },
+        }
+    )
+);

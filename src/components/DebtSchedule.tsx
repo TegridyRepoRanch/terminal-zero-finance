@@ -15,19 +15,27 @@ const columns: Column<DebtRow>[] = [
 export function DebtSchedule() {
     const { debtSchedule, assumptions } = useFinanceStore();
 
-    // Calculate cumulative interest paid
-    let cumulativeInterest = 0;
-    const interestAnalysis = debtSchedule.map((row) => {
-        cumulativeInterest += row.interestExpense;
-        return {
+    // Calculate cumulative interest paid using reduce for immutability
+    const interestAnalysis = debtSchedule.reduce<Array<{
+        year: number;
+        interest: number;
+        cumulative: number;
+        debtRatio: string;
+    }>>((acc, row) => {
+        const previousCumulative = acc.length > 0 ? acc[acc.length - 1].cumulative : 0;
+        const newCumulative = previousCumulative + row.interestExpense;
+
+        acc.push({
             year: row.year,
             interest: row.interestExpense,
-            cumulative: cumulativeInterest,
+            cumulative: newCumulative,
             debtRatio: row.beginningBalance > 0
                 ? ((row.interestExpense / row.beginningBalance) * 100).toFixed(2) + '%'
                 : '0.00%',
-        };
-    });
+        });
+
+        return acc;
+    }, []);
 
     return (
         <div className="space-y-6">
