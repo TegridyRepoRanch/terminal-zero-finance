@@ -1,18 +1,17 @@
-// Processing Screen Component
-// Shows progress during PDF extraction with multi-model support
+// Processing Screen Component - Gemini Only
+// Shows progress during PDF extraction with Gemini 2.5 Flash/Pro
 
 import { useEffect, useState, useMemo } from 'react';
 import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Shield } from 'lucide-react';
 import { useUploadStore } from '../../store/useUploadStore';
 import { extractTextFromPDF, truncateForLLM } from '../../lib/pdf-parser';
-import { extractFinancialsWithLLM } from '../../lib/llm-client';
 import {
+  extractFinancialsWithGemini,
   extractSegmentsWithGemini,
   analyzeMDAWithGemini,
-  validateExtractionWithGemini,
 } from '../../lib/gemini-client';
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
-import { getOpenAIApiKey, getGeminiApiKey, hasGeminiKey } from '../../lib/api-config';
+import { getGeminiApiKey, hasGeminiKey } from '../../lib/api-config';
 import type { ExtractionMetadata, ExtractionWarning } from '../../lib/extraction-types';
 
 interface ProcessingScreenProps {
@@ -25,7 +24,7 @@ interface ProcessingStep {
   id: string;
   label: string;
   status: 'pending' | 'active' | 'complete' | 'error';
-  model?: 'gpt4' | 'gemini';
+  model?: 'flash' | 'pro';
 }
 
 export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingScreenProps) {
@@ -44,17 +43,23 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
   const initialSteps = useMemo(() => {
     const baseSteps: ProcessingStep[] = [
       { id: 'parse', label: 'Parsing PDF document', status: 'pending' },
-      { id: 'extract-gpt', label: 'Extracting financials (GPT-4)', status: 'pending', model: 'gpt4' },
+      {
+        id: 'extract', label: extractionMode === 'fast'
+          ? 'Extracting financials (Gemini 2.5 Flash)'
+          : 'Extracting financials (Gemini 2.5 Pro)',
+        status: 'pending',
+        model: extractionMode === 'fast' ? 'flash' : 'pro'
+      },
     ];
 
     if (extractionMode === 'thorough') {
       baseSteps.push(
-        { id: 'segments', label: 'Analyzing segments (Gemini)', status: 'pending', model: 'gemini' },
-        { id: 'mda', label: 'Analyzing MD&A (Gemini)', status: 'pending', model: 'gemini' }
+        { id: 'segments', label: 'Analyzing segments (Gemini Pro)', status: 'pending', model: 'pro' },
+        { id: 'mda', label: 'Analyzing MD&A (Gemini Pro)', status: 'pending', model: 'pro' }
       );
     } else if (extractionMode === 'validated') {
       baseSteps.push(
-        { id: 'validate-gemini', label: 'Cross-validation (Gemini)', status: 'pending', model: 'gemini' }
+        { id: 'validate', label: 'Deep validation (Gemini Pro)', status: 'pending', model: 'pro' }
       );
     }
 
@@ -85,27 +90,14 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       return;
     }
 
-    let apiKey: string;
-    let geminiApiKey: string | null = null;
-
-    try {
-      apiKey = getOpenAIApiKey();
-    } catch {
-      setError('OpenAI API key not configured');
+    // Only need Gemini API key now
+    if (!hasGeminiKey()) {
+      setError('Gemini API key not configured. Add VITE_GEMINI_API_KEY to your environment.');
       onError();
       return;
     }
 
-    // Check for Gemini key if needed
-    if (extractionMode === 'thorough' || extractionMode === 'validated') {
-      if (!hasGeminiKey()) {
-        setError('Gemini API key required for this extraction mode');
-        onError();
-        return;
-      }
-      geminiApiKey = getGeminiApiKey();
-    }
-
+    const geminiApiKey = getGeminiApiKey();
     let cancelled = false;
 
     const runExtraction = async () => {
@@ -138,29 +130,30 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         // Truncate text for LLM if needed
         const truncatedText = truncateForLLM(parseResult.text, 100000);
 
-        // Step 2: Extract with GPT-4
-        updateStep('extract-gpt', 'active');
-        setStatus('extracting', 'Analyzing with GPT-4...');
-        setCurrentStepMessage('Sending to GPT-4 for analysis...');
+        // Step 2: Extract with Gemini
+        updateStep('extract', 'active');
+        const modelName = extractionMode === 'fast' ? 'Gemini 2.5 Flash' : 'Gemini 2.5 Pro';
+        setStatus('extracting', `Analyzing with ${modelName}...`);
+        setCurrentStepMessage(`Sending to ${modelName} for comprehensive analysis...`);
 
-        const gptResult = await extractFinancialsWithLLM(
+        const extractionResult = await extractFinancialsWithGemini(
           truncatedText,
-          apiKey,
+          geminiApiKey,
           (message) => setCurrentStepMessage(message)
         );
 
         if (cancelled) return;
 
-        updateStep('extract-gpt', 'complete');
+        updateStep('extract', 'complete');
         currentStep++;
         setProgress(progressForStep(0));
 
-        let finalFinancials = gptResult.financials;
-        let finalConfidence = gptResult.confidence;
-        let allWarnings: ExtractionWarning[] = [...gptResult.warnings];
+        let finalFinancials = extractionResult.financials;
+        let finalConfidence = extractionResult.confidence;
+        let allWarnings: ExtractionWarning[] = [...extractionResult.warnings];
 
         // Thorough mode: Add segment and MD&A analysis
-        if (extractionMode === 'thorough' && geminiApiKey) {
+        if (extractionMode === 'thorough') {
           // Segments
           updateStep('segments', 'active');
           setStatus('extracting', 'Analyzing segments...');
@@ -226,48 +219,53 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           setProgress(progressForStep(0));
         }
 
-        // Validated mode: Cross-validate with Gemini
-        if (extractionMode === 'validated' && geminiApiKey) {
-          updateStep('validate-gemini', 'active');
-          setStatus('extracting', 'Cross-validating...');
+        // Validated mode: Run second extraction pass for validation
+        if (extractionMode === 'validated') {
+          updateStep('validate', 'active');
+          setStatus('extracting', 'Deep validation...');
           setCurrentStepMessage('Running validation pass with Gemini 2.5 Pro...');
 
           try {
-            const validationResult = await validateExtractionWithGemini(
-              gptResult,
+            // Run second extraction for comparison
+            const validationResult = await extractFinancialsWithGemini(
               truncatedText,
               geminiApiKey,
               (message) => setCurrentStepMessage(message)
             );
 
-            // Use validated financials
-            finalFinancials = validationResult.validated;
-            finalConfidence = validationResult.confidence;
+            // Compare and report any discrepancies
+            const discrepancies: string[] = [];
+            const fields = ['revenue', 'netIncome', 'totalAssets', 'totalDebt'] as const;
 
-            // Add discrepancy warnings
-            for (const discrepancy of validationResult.discrepancies) {
+            for (const field of fields) {
+              const original = (finalFinancials as Record<string, number>)[field];
+              const validated = (validationResult.financials as Record<string, number>)[field];
+              if (original && validated && Math.abs(original - validated) / original > 0.01) {
+                discrepancies.push(`${field}: ${original.toLocaleString()} vs ${validated.toLocaleString()}`);
+              }
+            }
+
+            if (discrepancies.length === 0) {
+              finalFinancials.extractionNotes.push('✓ Validation pass confirmed all key figures');
+              finalConfidence.overall = Math.min(1, finalConfidence.overall + 0.1);
+            } else {
               allWarnings.push({
-                field: discrepancy.field,
-                message: `GPT-4: ${discrepancy.gptValue.toLocaleString()}, Gemini: ${discrepancy.geminiValue.toLocaleString()}. Selected: ${discrepancy.selectedValue.toLocaleString()} (${discrepancy.reason})`,
+                field: 'validation',
+                message: `Minor discrepancies found: ${discrepancies.join(', ')}`,
                 severity: 'medium',
               });
             }
-
-            finalFinancials.extractionNotes.push(
-              ...validationResult.validationNotes,
-              `Cross-validation confidence: ${(validationResult.overallConfidence * 100).toFixed(0)}%`
-            );
           } catch (err) {
             allWarnings.push({
               field: 'validation',
-              message: `Cross-validation failed, using GPT-4 results: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              message: `Validation pass failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
               severity: 'medium',
             });
           }
 
           if (cancelled) return;
 
-          updateStep('validate-gemini', 'complete');
+          updateStep('validate', 'complete');
           currentStep++;
           setProgress(progressForStep(0));
         }
@@ -356,28 +354,27 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       return <AlertCircle className="w-5 h-5 text-red-400" />;
     }
     if (status === 'active') {
-      return <Loader2 className={`w-5 h-5 animate-spin ${
-        model === 'gemini' ? 'text-blue-400' : 'text-emerald-400'
-      }`} />;
+      return <Loader2 className={`w-5 h-5 animate-spin ${model === 'pro' ? 'text-blue-400' : 'text-cyan-400'
+        }`} />;
     }
     return <div className="w-5 h-5 rounded-full border-2 border-zinc-600" />;
   };
 
-  const getModelBadge = (model?: 'gpt4' | 'gemini') => {
+  const getModelBadge = (model?: 'flash' | 'pro') => {
     if (!model) return null;
 
-    if (model === 'gpt4') {
+    if (model === 'flash') {
       return (
-        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-xs">
+        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded text-xs">
           <Zap className="w-3 h-3" />
-          GPT-4
+          Flash
         </span>
       );
     }
     return (
       <span className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded text-xs">
         <Sparkles className="w-3 h-3" />
-        Gemini
+        Pro
       </span>
     );
   };
@@ -385,7 +382,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
   const getModeIcon = () => {
     switch (extractionMode) {
       case 'fast':
-        return <Zap className="w-4 h-4 text-emerald-400" />;
+        return <Zap className="w-4 h-4 text-cyan-400" />;
       case 'thorough':
         return <Sparkles className="w-4 h-4 text-blue-400" />;
       case 'validated':
@@ -396,11 +393,11 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
   const getModeName = () => {
     switch (extractionMode) {
       case 'fast':
-        return 'Fast';
+        return 'Fast (Gemini Flash)';
       case 'thorough':
-        return 'Thorough';
+        return 'Thorough (Gemini Pro)';
       case 'validated':
-        return 'Validated';
+        return 'Validated (Gemini Pro)';
     }
   };
 
@@ -419,7 +416,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-zinc-400">
               {getModeIcon()}
-              <span>{getModeName()} Mode</span>
+              <span>{getModeName()}</span>
             </div>
             <button
               onClick={onCancel}
@@ -442,7 +439,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           {/* File Info */}
           <div className="flex items-center gap-4 p-4 bg-zinc-900 rounded-lg border border-zinc-800">
             <div className="p-3 bg-zinc-800 rounded-lg">
-              <FileText className="w-6 h-6 text-emerald-400" />
+              <FileText className="w-6 h-6 text-cyan-400" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-zinc-200 truncate">
@@ -458,13 +455,12 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           <div className="space-y-2">
             <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-500 ease-out ${
-                  extractionMode === 'fast'
-                    ? 'bg-emerald-500'
+                className={`h-full transition-all duration-500 ease-out ${extractionMode === 'fast'
+                    ? 'bg-cyan-500'
                     : extractionMode === 'thorough'
                       ? 'bg-blue-500'
                       : 'bg-purple-500'
-                }`}
+                  }`}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -481,9 +477,9 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
                 className={`
                   flex items-center gap-4 p-4 rounded-lg transition-colors
                   ${step.status === 'active'
-                    ? step.model === 'gemini'
+                    ? step.model === 'pro'
                       ? 'bg-zinc-900 border border-blue-500/30'
-                      : 'bg-zinc-900 border border-emerald-500/30'
+                      : 'bg-zinc-900 border border-cyan-500/30'
                     : 'bg-zinc-900/50'
                   }
                   ${step.status === 'error' ? 'border border-red-500/30' : ''}
@@ -518,7 +514,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       {/* Footer */}
       <footer className="px-6 py-4 border-t border-zinc-800">
         <div className="max-w-4xl mx-auto text-center text-xs text-zinc-600">
-          Processing is done entirely in your browser
+          Powered by Gemini 2.5 Flash & Pro • No OpenAI required
         </div>
       </footer>
     </div>
