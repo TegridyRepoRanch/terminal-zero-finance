@@ -28,22 +28,45 @@ export interface PDFParseProgress {
 let pdfjsModule: typeof import('pdfjs-dist') | null = null;
 
 /**
+ * Wrap a promise with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+    )
+  ]);
+}
+
+/**
  * Lazily load PDF.js module
  */
 async function getPDFJS(): Promise<typeof import('pdfjs-dist')> {
   if (pdfjsModule) {
+    console.log('[PDF] Using cached PDF.js module');
     return pdfjsModule;
   }
 
+  console.log('[PDF] Loading PDF.js module...');
+
   // Dynamic import - this creates a separate chunk
-  pdfjsModule = await import('pdfjs-dist');
+  pdfjsModule = await withTimeout(
+    import('pdfjs-dist'),
+    30000,
+    'PDF.js module load'
+  );
 
   // Configure worker after module is loaded
-  pdfjsModule.GlobalWorkerOptions.workerSrc = new URL(
+  const workerUrl = new URL(
     'pdfjs-dist/build/pdf.worker.min.mjs',
     import.meta.url
   ).toString();
 
+  console.log('[PDF] Setting worker URL:', workerUrl);
+  pdfjsModule.GlobalWorkerOptions.workerSrc = workerUrl;
+
+  console.log('[PDF] PDF.js module loaded successfully');
   return pdfjsModule;
 }
 
@@ -57,12 +80,22 @@ export async function extractTextFromPDF(
   file: File,
   onProgress?: (progress: PDFParseProgress) => void
 ): Promise<PDFParseResult> {
+  console.log('[PDF] Starting extraction for:', file.name, 'Size:', file.size);
+
+  console.log('[PDF] Getting PDF.js library...');
   const pdfjsLib = await getPDFJS();
 
   // Convert File to ArrayBuffer
-  const arrayBuffer = await file.arrayBuffer();
+  console.log('[PDF] Converting file to ArrayBuffer...');
+  const arrayBuffer = await withTimeout(
+    file.arrayBuffer(),
+    30000,
+    'File to ArrayBuffer conversion'
+  );
+  console.log('[PDF] ArrayBuffer size:', arrayBuffer.byteLength);
 
   // Load the PDF document
+  console.log('[PDF] Loading PDF document...');
   const loadingTask = pdfjsLib.getDocument({
     data: arrayBuffer,
     useWorkerFetch: false,
@@ -70,41 +103,68 @@ export async function extractTextFromPDF(
     useSystemFonts: true,
   });
 
-  const pdf: PDFDocumentProxy = await loadingTask.promise;
+  const pdf: PDFDocumentProxy = await withTimeout(
+    loadingTask.promise,
+    60000,
+    'PDF document loading'
+  );
   const pageCount = pdf.numPages;
+  console.log('[PDF] Document loaded, pages:', pageCount);
 
   // Extract metadata
   const metadata = await pdf.getMetadata().catch(() => null);
   const info = metadata?.info as Record<string, string> | undefined;
 
   // Extract text from each page
+  console.log('[PDF] Extracting text from', pageCount, 'pages...');
   const textParts: string[] = [];
 
   for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const textContent = await page.getTextContent();
+    try {
+      const page = await withTimeout(
+        pdf.getPage(pageNum),
+        10000,
+        `Getting page ${pageNum}`
+      );
+      const textContent = await withTimeout(
+        page.getTextContent(),
+        10000,
+        `Extracting text from page ${pageNum}`
+      );
 
-    // Combine text items into a string
-    const pageText = textContent.items
-      .map((item) => {
-        if ('str' in item) {
-          return (item as TextItem).str;
-        }
-        return '';
-      })
-      .join(' ');
+      // Combine text items into a string
+      const pageText = textContent.items
+        .map((item) => {
+          if ('str' in item) {
+            return (item as TextItem).str;
+          }
+          return '';
+        })
+        .join(' ');
 
-    textParts.push(pageText);
+      textParts.push(pageText);
 
-    // Report progress
-    if (onProgress) {
-      onProgress({
-        currentPage: pageNum,
-        totalPages: pageCount,
-        percent: Math.round((pageNum / pageCount) * 100),
-      });
+      // Report progress
+      if (onProgress) {
+        onProgress({
+          currentPage: pageNum,
+          totalPages: pageCount,
+          percent: Math.round((pageNum / pageCount) * 100),
+        });
+      }
+
+      // Log every 10 pages
+      if (pageNum % 10 === 0) {
+        console.log(`[PDF] Processed ${pageNum}/${pageCount} pages`);
+      }
+    } catch (pageError) {
+      console.error(`[PDF] Error on page ${pageNum}:`, pageError);
+      // Continue with other pages even if one fails
+      textParts.push('');
     }
   }
+
+  console.log('[PDF] All pages extracted');
 
   // Clean up
   await pdf.destroy();
