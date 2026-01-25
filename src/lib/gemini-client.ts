@@ -381,7 +381,7 @@ export async function validateExtractionWithGemini(
 
 /**
  * Full Gemini extraction
- * @param useFlash - If true, uses Gemini 3 Flash (faster). If false, uses Gemini 3 Pro (more accurate).
+ * @param useFlash - If true, uses Gemini 2.5 Flash (faster). If false, uses Gemini 2.5 Pro (more accurate).
  */
 export async function extractFinancialsWithGemini(
   text: string,
@@ -389,7 +389,7 @@ export async function extractFinancialsWithGemini(
   onProgress?: (message: string) => void,
   useFlash: boolean = false
 ): Promise<LLMExtractionResponse> {
-  const modelName = useFlash ? 'Gemini 3 Flash' : 'Gemini 3 Pro';
+  const modelName = useFlash ? 'Gemini 2.5 Flash' : 'Gemini 2.5 Pro';
   onProgress?.(`Extracting financials with ${modelName}...`);
 
   const FULL_EXTRACTION_PROMPT = `You are a financial analyst AI. Extract key financial data from the following SEC 10-K or 10-Q filing.
@@ -457,7 +457,8 @@ Filing text:
 ` + text;
 
   const genAI = getGeminiClient(apiKey);
-  const modelId = useFlash ? 'gemini-3.0-flash' : 'gemini-3.0-pro';
+  // Use correct Gemini 2.5 model identifiers
+  const modelId = useFlash ? 'gemini-2.5-flash-preview-05-20' : 'gemini-2.5-pro-preview-05-06';
   const model = genAI.getGenerativeModel({ model: modelId });
 
   const result = await model.generateContent({
