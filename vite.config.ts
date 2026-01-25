@@ -10,45 +10,15 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          // Important: Order matters! Check most specific first
-
-          // Split PDF.js into its own chunk (large library - 446 KB)
-          if (id.includes('pdfjs-dist')) {
-            return 'pdfjs';
-          }
-
+        manualChunks: {
           // Split charting library (222 KB)
-          if (id.includes('recharts')) {
-            return 'recharts';
-          }
-
-          // Split React core, DOM, and scheduler together (avoids circular dependency)
-          if (id.includes('node_modules/react') ||
-              id.includes('node_modules/react-dom') ||
-              id.includes('node_modules/scheduler')) {
-            return 'react-vendor';
-          }
-
+          'recharts': ['recharts'],
           // Split Gemini AI SDK
-          if (id.includes('@google/generative-ai')) {
-            return 'gemini-ai';
-          }
-
+          'gemini-ai': ['@google/generative-ai'],
           // Split Zustand state management
-          if (id.includes('zustand')) {
-            return 'zustand';
-          }
-
+          'zustand': ['zustand'],
           // Split Lucide icons
-          if (id.includes('lucide-react')) {
-            return 'lucide-icons';
-          }
-
-          // All other node_modules (Tailwind, clsx, etc.)
-          if (id.includes('node_modules')) {
-            return 'vendor';
-          }
+          'lucide-icons': ['lucide-react'],
         },
       },
     },

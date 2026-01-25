@@ -130,14 +130,21 @@ export const useFinanceStore = create<FinanceState>()(
 
             setAssumptionsFromExtraction: (assumptions, metadata) => {
                 const calcs = recalculate(assumptions);
+                // Try to find matching company in sampleCompanies to get market price
+                const ticker = metadata.companyName.split(' ')[0].toUpperCase().slice(0, 4);
+                const matchingCompany = sampleCompanies.find(
+                    (c) => c.ticker === ticker ||
+                           metadata.companyName.toLowerCase().includes(c.name.toLowerCase()) ||
+                           c.name.toLowerCase().includes(metadata.companyName.toLowerCase().split(' ')[0])
+                );
                 set({
                     assumptions,
                     ...calcs,
                     dataSource: 'extraction',
                     extractionMetadata: metadata,
-                    // Create a company entry from extraction metadata
-                    company: {
-                        ticker: metadata.companyName.split(' ')[0].toUpperCase().slice(0, 4),
+                    // Create a company entry from extraction metadata, using market data if available
+                    company: matchingCompany || {
+                        ticker: ticker,
                         name: metadata.companyName,
                         sector: 'Unknown',
                         marketPrice: 0,

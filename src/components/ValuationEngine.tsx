@@ -144,22 +144,22 @@ export function ValuationEngine() {
                     </h3>
                     <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={evBreakdown} layout="vertical" margin={{ left: 20, right: 20 }}>
+                            <BarChart data={evBreakdown} layout="vertical" margin={{ left: 20, right: 20, bottom: 10 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
                                 <XAxis
                                     type="number"
                                     stroke="#a1a1aa"
-                                    fontSize={13}
-                                    tick={{ fill: '#d4d4d8' }}
+                                    fontSize={12}
+                                    tick={{ fill: '#fafafa', fontWeight: 500 }}
                                     tickFormatter={(v) => `$${v}M`}
                                 />
                                 <YAxis
                                     type="category"
                                     dataKey="name"
                                     stroke="#a1a1aa"
-                                    fontSize={13}
-                                    width={110}
-                                    tick={{ fill: '#e4e4e7' }}
+                                    fontSize={12}
+                                    width={120}
+                                    tick={{ fill: '#fafafa', fontWeight: 500 }}
                                 />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
