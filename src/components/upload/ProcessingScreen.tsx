@@ -139,7 +139,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         const extractionResult = await extractFinancialsWithGemini(
           truncatedText,
           geminiApiKey,
-          (message) => setCurrentStepMessage(message)
+          (message) => setCurrentStepMessage(message),
+          extractionMode === 'fast' // Use Flash for fast mode, Pro for others
         );
 
         if (cancelled) return;
