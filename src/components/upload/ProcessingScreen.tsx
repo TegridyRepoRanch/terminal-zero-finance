@@ -239,9 +239,9 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             const fields = ['revenue', 'netIncome', 'totalAssets', 'totalDebt'] as const;
 
             for (const field of fields) {
-              const original = (finalFinancials as unknown as Record<string, number>)[field];
-              const validated = (validationResult.financials as unknown as Record<string, number>)[field];
-              if (original && validated && Math.abs(original - validated) / original > 0.01) {
+              const original = Number(finalFinancials[field as keyof typeof finalFinancials] || 0);
+              const validated = Number(validationResult.financials[field as keyof typeof validationResult.financials] || 0);
+              if (original > 0 && validated > 0 && Math.abs(original - validated) / original > 0.01) {
                 discrepancies.push(`${field}: ${original.toLocaleString()} vs ${validated.toLocaleString()}`);
               }
             }
@@ -457,10 +457,10 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all duration-500 ease-out ${extractionMode === 'fast'
-                    ? 'bg-cyan-500'
-                    : extractionMode === 'thorough'
-                      ? 'bg-blue-500'
-                      : 'bg-purple-500'
+                  ? 'bg-cyan-500'
+                  : extractionMode === 'thorough'
+                    ? 'bg-blue-500'
+                    : 'bg-purple-500'
                   }`}
                 style={{ width: `${progressPercent}%` }}
               />
