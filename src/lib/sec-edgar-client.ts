@@ -407,18 +407,30 @@ export async function fetchLatest10K(
     ticker: string,
     onProgress?: (message: string) => void
 ): Promise<{ text: string; url: string; metadata: SECFiling }> {
+    const shouldUseBackend = useBackend();
+    console.log('[SEC] fetchLatest10K - useBackend:', shouldUseBackend);
+
     // Use backend if available (has proper User-Agent headers)
-    if (useBackend()) {
+    if (shouldUseBackend) {
         try {
-            return await fetchLatestFilingViaBackend(ticker, '10-K', onProgress);
+            console.log('[SEC] Attempting backend fetch...');
+            const result = await fetchLatestFilingViaBackend(ticker, '10-K', onProgress);
+            console.log('[SEC] Backend fetch succeeded');
+            return result;
         } catch (backendError) {
-            console.warn('[SEC] Backend fetch failed, falling back to CORS proxy:', backendError);
-            // Fall through to CORS proxy method
+            console.error('[SEC] Backend fetch FAILED:', backendError);
+            const errorMsg = backendError instanceof Error ? backendError.message : String(backendError);
+
+            // Show error to user instead of silently falling back
+            throw new Error(`Backend SEC fetch failed: ${errorMsg}. Check backend logs for details.`);
         }
+    } else {
+        console.warn('[SEC] Not using backend - will use CORS proxies (likely to fail)');
     }
 
-    // Fallback to CORS proxy method
+    // Fallback to CORS proxy method (likely to fail - SEC blocks CORS)
     onProgress?.(`Looking up ${ticker.toUpperCase()}...`);
+    console.warn('[SEC] Using CORS proxy fallback - SEC.gov may block this request');
     const filings = await getRecentFilings(ticker, '10-K', 1);
 
     if (filings.length === 0) {
@@ -438,18 +450,30 @@ export async function fetchLatest10Q(
     ticker: string,
     onProgress?: (message: string) => void
 ): Promise<{ text: string; url: string; metadata: SECFiling }> {
+    const shouldUseBackend = useBackend();
+    console.log('[SEC] fetchLatest10Q - useBackend:', shouldUseBackend);
+
     // Use backend if available (has proper User-Agent headers)
-    if (useBackend()) {
+    if (shouldUseBackend) {
         try {
-            return await fetchLatestFilingViaBackend(ticker, '10-Q', onProgress);
+            console.log('[SEC] Attempting backend fetch...');
+            const result = await fetchLatestFilingViaBackend(ticker, '10-Q', onProgress);
+            console.log('[SEC] Backend fetch succeeded');
+            return result;
         } catch (backendError) {
-            console.warn('[SEC] Backend fetch failed, falling back to CORS proxy:', backendError);
-            // Fall through to CORS proxy method
+            console.error('[SEC] Backend fetch FAILED:', backendError);
+            const errorMsg = backendError instanceof Error ? backendError.message : String(backendError);
+
+            // Show error to user instead of silently falling back
+            throw new Error(`Backend SEC fetch failed: ${errorMsg}. Check backend logs for details.`);
         }
+    } else {
+        console.warn('[SEC] Not using backend - will use CORS proxies (likely to fail)');
     }
 
-    // Fallback to CORS proxy method
+    // Fallback to CORS proxy method (likely to fail - SEC blocks CORS)
     onProgress?.(`Looking up ${ticker.toUpperCase()}...`);
+    console.warn('[SEC] Using CORS proxy fallback - SEC.gov may block this request');
     const filings = await getRecentFilings(ticker, '10-Q', 1);
 
     if (filings.length === 0) {
