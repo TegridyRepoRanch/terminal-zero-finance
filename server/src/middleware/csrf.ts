@@ -21,7 +21,7 @@ const csrfProtectionUtils = doubleCsrf({
   ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
 });
 
-const { doubleCsrfProtection } = csrfProtectionUtils;
+const { generateCsrfToken, doubleCsrfProtection } = csrfProtectionUtils;
 
 /**
  * Generates and returns a CSRF token for the client.
@@ -38,10 +38,8 @@ const { doubleCsrfProtection } = csrfProtectionUtils;
  * @param res - Express response object
  */
 export function csrfTokenGenerator(req: Request, res: Response) {
-  // csrf-csrf v4 automatically generates the token
-  // The token is available in res.locals.csrfToken after protection middleware
-  // For the token endpoint, we just need to set the cookie and return any success response
-  const token = req.csrfToken?.() || 'token-set-in-cookie';
+  // Generate the CSRF token and set the cookie
+  const token = generateCsrfToken(req, res);
   res.json({
     token,
     success: true,
