@@ -418,6 +418,12 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         updateStep('review', 'complete');
         currentStep++;
 
+        // Defensive check: ensure finalResult has expected structure
+        if (!finalResult?.financials) {
+          console.warn('[Processing] Final result missing financials, falling back to Flash result');
+          finalResult = flashResult!;
+        }
+
         finalFinancials = finalResult.financials;
         finalConfidence = finalResult.confidence;
         allWarnings = [...allWarnings, ...(finalResult.warnings || [])];
