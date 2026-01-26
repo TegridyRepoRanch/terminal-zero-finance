@@ -135,63 +135,53 @@ export async function extractTextFromPDF(
   const metadata = await pdf.getMetadata().catch(() => null);
   const info = metadata?.info as Record<string, string> | undefined;
 
-  // Extract text from each page (process in parallel batches for speed)
+  // Extract text from each page
   console.log('[PDF] Extracting text from', pageCount, 'pages...');
-  const textParts: string[] = new Array(pageCount).fill('');
-  const BATCH_SIZE = 10; // Process 10 pages at a time
+  const textParts: string[] = [];
 
-  for (let batchStart = 1; batchStart <= pageCount; batchStart += BATCH_SIZE) {
-    const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, pageCount);
-    console.log(`[PDF] Processing batch: pages ${batchStart}-${batchEnd}`);
+  for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+    try {
+      const page = await withTimeout(
+        pdf.getPage(pageNum),
+        10000,
+        `Getting page ${pageNum}`
+      );
+      const textContent = await withTimeout(
+        page.getTextContent(),
+        10000,
+        `Extracting text from page ${pageNum}`
+      );
 
-    // Process batch in parallel
-    const batchPromises = [];
-    for (let pageNum = batchStart; pageNum <= batchEnd; pageNum++) {
-      const pagePromise = (async () => {
-        try {
-          const page = await withTimeout(
-            pdf.getPage(pageNum),
-            30000, // Increased timeout for large PDFs
-            `Getting page ${pageNum}`
-          );
-          const textContent = await withTimeout(
-            page.getTextContent(),
-            30000, // Increased timeout for large PDFs
-            `Extracting text from page ${pageNum}`
-          );
-
-          // Combine text items into a string
-          const pageText = textContent.items
-            .map((item) => {
-              if ('str' in item) {
-                return (item as TextItem).str;
-              }
-              return '';
-            })
-            .join(' ');
-
-          textParts[pageNum - 1] = pageText;
-
-          // Report progress for this page
-          if (onProgress) {
-            onProgress({
-              currentPage: pageNum,
-              totalPages: pageCount,
-              percent: Math.round((pageNum / pageCount) * 100),
-            });
+      // Combine text items into a string
+      const pageText = textContent.items
+        .map((item) => {
+          if ('str' in item) {
+            return (item as TextItem).str;
           }
-        } catch (pageError) {
-          console.error(`[PDF] Error on page ${pageNum}:`, pageError);
-          // Continue with other pages even if one fails
-          textParts[pageNum - 1] = '';
-        }
-      })();
-      batchPromises.push(pagePromise);
-    }
+          return '';
+        })
+        .join(' ');
 
-    // Wait for all pages in this batch to complete
-    await Promise.all(batchPromises);
-    console.log(`[PDF] Batch complete: ${batchEnd}/${pageCount} pages processed`);
+      textParts.push(pageText);
+
+      // Report progress
+      if (onProgress) {
+        onProgress({
+          currentPage: pageNum,
+          totalPages: pageCount,
+          percent: Math.round((pageNum / pageCount) * 100),
+        });
+      }
+
+      // Log every 10 pages
+      if (pageNum % 10 === 0) {
+        console.log(`[PDF] Processed ${pageNum}/${pageCount} pages`);
+      }
+    } catch (pageError) {
+      console.error(`[PDF] Error on page ${pageNum}:`, pageError);
+      // Continue with other pages even if one fails
+      textParts.push('');
+    }
   }
 
   console.log('[PDF] All pages extracted');
