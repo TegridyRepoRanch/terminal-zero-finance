@@ -74,11 +74,13 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       return;
     }
 
-    // Check for Gemini API key
-    console.log('[Processing] Gemini key present:', hasGeminiKey());
+    // Detect configuration mode
+    const configMode = getConfigMode();
+    console.log('[Processing] Configuration mode:', configMode);
 
-    if (!hasGeminiKey()) {
-      const msg = 'Gemini API key not configured. Add VITE_GEMINI_API_KEY to your environment.';
+    // Check configuration based on mode
+    if (configMode === 'unconfigured') {
+      const msg = 'No API configuration found. Please set VITE_BACKEND_URL or VITE_GEMINI_API_KEY.';
       console.error('[Processing]', msg);
       setError(msg);
       setErrorMessage(msg);
@@ -86,17 +88,34 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       return;
     }
 
+    // Get API key only for legacy mode
     let geminiApiKey: string = '';
-    try {
-      geminiApiKey = getGeminiApiKey();
-      console.log('[Processing] Gemini API key retrieved');
-    } catch (keyError) {
-      const msg = `Failed to get API key: ${keyError instanceof Error ? keyError.message : 'Unknown error'}`;
-      console.error('[Processing]', msg);
-      setError(msg);
-      setErrorMessage(msg);
-      setIsStarting(false);
-      return;
+    if (configMode === 'legacy') {
+      console.log('[Processing] Running in LEGACY mode (frontend API keys)');
+      console.log('[Processing] Gemini key present:', hasGeminiKey());
+
+      if (!hasGeminiKey()) {
+        const msg = 'Gemini API key not configured. Add VITE_GEMINI_API_KEY to your environment.';
+        console.error('[Processing]', msg);
+        setError(msg);
+        setErrorMessage(msg);
+        setIsStarting(false);
+        return;
+      }
+
+      try {
+        geminiApiKey = getGeminiApiKey();
+        console.log('[Processing] API key retrieved successfully');
+      } catch (keyError) {
+        const msg = `Failed to get API key: ${keyError instanceof Error ? keyError.message : 'Unknown error'}`;
+        console.error('[Processing]', msg);
+        setError(msg);
+        setErrorMessage(msg);
+        setIsStarting(false);
+        return;
+      }
+    } else {
+      console.log('[Processing] Running in BACKEND mode (API keys on server)');
     }
 
     let cancelled = false;
@@ -146,25 +165,45 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         let finalConfidence;
         let allWarnings: ExtractionWarning[] = [];
 
-        // Send PDF directly to Gemini - let AI do the heavy lifting
+        // Step 2: AI Analysis - Backend or Legacy mode
         console.log('[Processing] Step 2: AI Analysis...');
         updateStep('flash', 'active');
-        setStatus('extracting', 'Analyzing with Gemini 3...');
-        setCurrentStepMessage('Gemini is reading and analyzing the PDF directly...');
+        setStatus('extracting', 'Analyzing document with AI...');
+        setCurrentStepMessage('Reading and analyzing the PDF...');
 
         let extractionResult;
         try {
           if (!pdfData.base64Data) {
             throw new Error('PDF data not available');
           }
-          extractionResult = await extractFinancialsFromPDF(
-            pdfData.base64Data,
-            pdfData.mimeType,
-            geminiApiKey,
-            (message: string) => setCurrentStepMessage(message),
-            true // useFlash for speed
-          );
-          console.log('[Processing] Gemini extraction complete');
+
+          // Backend mode: Use secure backend API
+          if (configMode === 'backend') {
+            console.log('[Processing] Using backend API for PDF extraction...');
+            setCurrentStepMessage('Analyzing PDF via secure backend API...');
+
+            extractionResult = await extractFinancialsFromPDFWithBackend(
+              pdfData.base64Data,
+              pdfData.mimeType,
+              (message: string) => setCurrentStepMessage(message),
+              true // useFlash for speed
+            );
+          }
+          // Legacy mode: Direct API call from frontend
+          else {
+            console.log('[Processing] Using direct Gemini API (legacy mode)...');
+            setCurrentStepMessage('Gemini is reading and analyzing the PDF directly...');
+
+            extractionResult = await extractFinancialsFromPDF(
+              pdfData.base64Data,
+              pdfData.mimeType,
+              geminiApiKey,
+              (message: string) => setCurrentStepMessage(message),
+              true // useFlash for speed
+            );
+          }
+
+          console.log('[Processing] Extraction complete');
 
           finalFinancials = extractionResult.financials;
           finalConfidence = extractionResult.confidence;

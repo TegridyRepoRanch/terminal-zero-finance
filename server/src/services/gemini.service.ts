@@ -175,6 +175,89 @@ export async function extractFinancials(
 }
 
 /**
+ * Extracts financial data from PDF file (base64) using Gemini AI.
+ *
+ * Sends the PDF directly to Gemini as inline data - no text extraction needed.
+ * Gemini reads the PDF natively and extracts structured financial data.
+ *
+ * @param pdfBase64 - Base64-encoded PDF file data
+ * @param mimeType - MIME type of the PDF (should be 'application/pdf')
+ * @param useFlash - True to use Flash model, false for Pro model
+ * @returns Parsed JSON object containing extracted financial data
+ *
+ * @throws {AppError} 408 if extraction times out
+ * @throws {AppError} 500 if API call or JSON parsing fails
+ */
+export async function extractFinancialsFromPDF(
+  pdfBase64: string,
+  mimeType: string,
+  useFlash: boolean
+): Promise<unknown> {
+  if (!genAI) {
+    throw new AppError(500, 'Gemini client not initialized');
+  }
+
+  const modelId = useFlash ? GEMINI_MODELS.FLASH : GEMINI_MODELS.PRO;
+  console.log(`[Gemini] Extracting financials from PDF with ${modelId}`);
+
+  const model = genAI.getGenerativeModel({ model: modelId });
+
+  // Financial extraction prompt
+  const prompt = `Extract financial data from this SEC filing and return as JSON.
+
+Return a JSON object with this exact structure:
+{
+  "companyName": string,
+  "filingType": "10-K" | "10-Q" | "8-K",
+  "fiscalPeriod": "Q1 2024" | "FY 2023" etc,
+  "revenue": [numbers for each period],
+  "netIncome": [numbers],
+  "totalAssets": [numbers],
+  "totalLiabilities": [numbers],
+  "cashFlow": [numbers],
+  "extractionNotes": [any important notes]
+}
+
+Focus on the most recent periods shown in the financial statements.`;
+
+  try {
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: pdfBase64,
+              },
+            },
+            { text: prompt },
+          ],
+        }],
+        generationConfig: {
+          temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+          responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
+        },
+      }),
+      config.geminiTimeout,
+      'PDF extraction'
+    );
+
+    const response = result.response.text();
+    return safeParseJSON(response, 'PDF financial extraction');
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+
+    console.error(`[Gemini] PDF extraction error:`, error);
+    throw new AppError(
+      500,
+      `PDF extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+/**
  * Extracts business segment data from SEC filing text.
  *
  * Always uses Gemini Pro model with low temperature (0.1) for accuracy.

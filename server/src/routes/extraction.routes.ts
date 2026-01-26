@@ -27,6 +27,35 @@ router.post(
 );
 
 /**
+ * POST /api/extraction/financials/pdf
+ * Extract financial data from PDF file (base64)
+ */
+router.post(
+  '/financials/pdf',
+  asyncHandler(async (req, res) => {
+    const { pdfBase64, mimeType, useFlash } = req.body;
+
+    if (!pdfBase64 || !mimeType) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: pdfBase64, mimeType',
+      });
+    }
+
+    const result = await geminiService.extractFinancialsFromPDF(
+      pdfBase64,
+      mimeType,
+      useFlash || false
+    );
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  })
+);
+
+/**
  * POST /api/extraction/segments
  * Extract business segment data
  */
