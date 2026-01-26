@@ -4,12 +4,18 @@
 
 import { getConfigMode } from './api-config';
 
-// Backend URL
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+// Backend URL - auto-detect in production
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ||
+  (window.location.hostname.includes('vercel.app')
+    ? 'https://terminal-zero-finance-fyk1.vercel.app'
+    : 'http://localhost:3001');
 
 // Check if backend mode is configured
 function useBackend(): boolean {
-  return getConfigMode() === 'backend';
+  const mode = getConfigMode();
+  console.log('[SEC] Config mode:', mode, 'Backend URL:', BACKEND_URL);
+  // Always try backend first in production
+  return mode === 'backend' || window.location.hostname.includes('vercel.app');
 }
 
 // CORS proxies - fallback for when backend is unavailable
@@ -350,43 +356,48 @@ async function fetchLatestFilingViaBackend(
     const backendUrl = `${BACKEND_URL}/api/sec/latest-filing`;
     console.log(`[SEC] Fetching via backend: ${backendUrl}`);
 
-    const response = await fetch(backendUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ticker, formType }),
-        credentials: 'include',
-    });
+    try {
+        const response = await fetch(backendUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ticker, formType }),
+            credentials: 'include',
+        });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[SEC] Backend error:', response.status, errorText);
-        throw new Error(`Backend error: HTTP ${response.status}`);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[SEC] Backend error:', response.status, errorText);
+            throw new Error(`Backend HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+        }
+
+        const result = await response.json();
+
+        if (result.status !== 'success') {
+            throw new Error(result.error || 'Backend request failed');
+        }
+
+        const { filing, content, url } = result.data;
+
+        onProgress?.(`Found ${filing.companyName} ${formType} from ${filing.filingDate}`);
+
+        // Extract text from HTML if needed
+        let text = content;
+        if (filing.primaryDocument?.endsWith('.htm')) {
+            text = extractTextFromHTML(content);
+            onProgress?.('Parsed HTML filing document...');
+        }
+
+        return {
+            text,
+            url,
+            metadata: filing,
+        };
+    } catch (error) {
+        console.error('[SEC] Backend fetch failed:', error);
+        throw error;
     }
-
-    const result = await response.json();
-
-    if (result.status !== 'success') {
-        throw new Error(result.error || 'Backend request failed');
-    }
-
-    const { filing, content, url } = result.data;
-
-    onProgress?.(`Found ${filing.companyName} ${formType} from ${filing.filingDate}`);
-
-    // Extract text from HTML if needed
-    let text = content;
-    if (filing.primaryDocument?.endsWith('.htm')) {
-        text = extractTextFromHTML(content);
-        onProgress?.('Parsed HTML filing document...');
-    }
-
-    return {
-        text,
-        url,
-        metadata: filing,
-    };
 }
 
 /**

@@ -12,10 +12,11 @@ export const config = {
   geminiApiKey: process.env.GEMINI_API_KEY,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 
-  // CORS
+  // CORS - auto-include Vercel frontend in production
   allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',') || [
     'http://localhost:5173',
     'http://localhost:3000',
+    'https://terminal-zero-finance.vercel.app',
   ],
 
   // Rate Limiting
