@@ -1,54 +1,78 @@
 // SEC EDGAR Client - Fetch SEC filings by ticker symbol
 // Uses SEC's free public APIs (no authentication required)
 
-// Use allorigins.win with JSON wrapper - more reliable than raw proxy mode
-const ALLORIGINS_BASE = 'https://api.allorigins.win/get?url=';
+// CORS proxies - try multiple in case one is down
+const CORS_PROXIES = [
+    {
+        name: 'allorigins',
+        url: (target: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
+        parseResponse: async (response: Response) => {
+            const data = await response.json();
+            if (!data.contents) throw new Error('Empty response');
+            return new Response(data.contents, { status: 200, headers: { 'Content-Type': 'application/json' } });
+        },
+    },
+    {
+        name: 'thingproxy',
+        url: (target: string) => `https://thingproxy.freeboard.io/fetch/${target}`,
+        parseResponse: async (response: Response) => response, // Direct passthrough
+    },
+    {
+        name: 'corsproxy.io',
+        url: (target: string) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
+        parseResponse: async (response: Response) => response, // Direct passthrough
+    },
+];
 
 /**
- * Fetch with CORS proxy (allorigins.win JSON wrapper)
+ * Fetch with CORS proxy - tries multiple proxies as fallback
  */
 async function fetchWithCorsProxy(
     url: string,
     timeoutMs: number = 120000
 ): Promise<Response> {
-    console.log(`[SEC] Fetching via allorigins: ${url}`);
+    console.log(`[SEC] Fetching: ${url}`);
 
-    const proxiedUrl = ALLORIGINS_BASE + encodeURIComponent(url);
+    let lastError: Error | null = null;
 
-    // Create abort controller for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    // Try each proxy in order
+    for (const proxy of CORS_PROXIES) {
+        const proxiedUrl = proxy.url(url);
+        console.log(`[SEC] Trying ${proxy.name}...`);
 
-    try {
-        const response = await fetch(proxiedUrl, {
-            signal: controller.signal,
-        });
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-        clearTimeout(timeoutId);
+        try {
+            const response = await fetch(proxiedUrl, {
+                signal: controller.signal,
+            });
 
-        if (!response.ok) {
-            throw new Error(`Proxy error: ${response.status}`);
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const parsedResponse = await proxy.parseResponse(response);
+            console.log(`[SEC] Success with ${proxy.name}`);
+            return parsedResponse;
+        } catch (error) {
+            clearTimeout(timeoutId);
+
+            if (error instanceof Error && error.name === 'AbortError') {
+                lastError = new Error(`Request timed out after ${timeoutMs / 1000}s`);
+                console.warn(`[SEC] ${proxy.name} timed out`);
+                continue;
+            }
+
+            lastError = error instanceof Error ? error : new Error('Unknown error');
+            console.warn(`[SEC] ${proxy.name} failed:`, lastError.message);
         }
-
-        // allorigins returns { contents: "...", status: {...} }
-        const data = await response.json();
-
-        if (!data.contents) {
-            throw new Error('Empty response from proxy');
-        }
-
-        // Return a fake Response with the contents
-        return new Response(data.contents, {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-        });
-    } catch (error) {
-        clearTimeout(timeoutId);
-        if (error instanceof Error && error.name === 'AbortError') {
-            throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
-        }
-        throw error;
     }
+
+    throw lastError || new Error('All CORS proxies failed');
 }
 
 // SEC EDGAR API endpoints

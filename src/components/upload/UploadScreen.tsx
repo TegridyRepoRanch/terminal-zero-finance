@@ -181,9 +181,10 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
                 />
               </div>
               <button
+                type="button"
                 onClick={() => handleFetchFiling('10-K')}
                 disabled={isFetching || !ticker.trim() || !allKeysConfigured}
-                className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 
+                className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700
                   text-white font-semibold rounded-lg transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed
                   flex items-center gap-2"
@@ -196,9 +197,10 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
                 10-K
               </button>
               <button
+                type="button"
                 onClick={() => handleFetchFiling('10-Q')}
                 disabled={isFetching || !ticker.trim() || !allKeysConfigured}
-                className="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700 
+                className="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700
                   text-white font-semibold rounded-lg transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed
                   flex items-center gap-2"
