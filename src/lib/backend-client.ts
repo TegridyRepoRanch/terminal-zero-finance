@@ -129,6 +129,26 @@ export async function extractFinancialsWithBackend(
 }
 
 /**
+ * Extract financials from PDF file (base64)
+ * Sends PDF directly to backend - Gemini reads it natively
+ */
+export async function extractFinancialsFromPDFWithBackend(
+  pdfBase64: string,
+  mimeType: string,
+  onProgress?: (message: string) => void,
+  useFlash: boolean = false
+): Promise<LLMExtractionResponse> {
+  const modelName = useFlash ? 'Gemini 3 Flash' : 'Gemini 3 Pro';
+  onProgress?.(`Analyzing PDF with ${modelName}...`);
+
+  return apiRequest<LLMExtractionResponse>('financials/pdf', {
+    pdfBase64,
+    mimeType,
+    useFlash,
+  });
+}
+
+/**
  * Extract business segment data
  */
 export async function extractSegmentsWithBackend(

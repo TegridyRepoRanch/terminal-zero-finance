@@ -366,3 +366,57 @@ export async function extractFinancialsWithGemini(
     throw new Error(`Gemini API error: ${error instanceof Error ? error.message : 'Unknown API error'}`);
   }
 }
+
+/**
+ * Extract financials directly from PDF file - let Gemini read the PDF
+ * No text extraction needed - Gemini handles the PDF natively
+ */
+export async function extractFinancialsFromPDF(
+  pdfBase64: string,
+  mimeType: string,
+  apiKey: string,
+  onProgress?: (message: string) => void,
+  useFlash: boolean = false
+): Promise<LLMExtractionResponse> {
+  const modelId = useFlash ? GEMINI_MODELS.FLASH : GEMINI_MODELS.PRO;
+  const modelName = getModelDisplayName(modelId);
+
+  onProgress?.(`Reading PDF with ${modelName}...`);
+  console.log(`[Gemini] Sending PDF directly to model: ${modelId}`);
+
+  const genAI = getGeminiClient(apiKey);
+  const model = genAI.getGenerativeModel({ model: modelId });
+
+  try {
+    const result = await withTimeout(
+      model.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: pdfBase64,
+              },
+            },
+            { text: FINANCIAL_EXTRACTION_PROMPT },
+          ],
+        }],
+        generationConfig: {
+          temperature: GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+          responseMimeType: GEMINI_CONFIG.RESPONSE_MIME_TYPE,
+        },
+      }),
+      180000, // 3 minute timeout for PDF processing
+      'PDF financial extraction'
+    );
+
+    const response = result.response.text();
+    console.log(`[Gemini] Response received, length: ${response.length}`);
+
+    return safeParseJSON<LLMExtractionResponse>(response, 'PDF financial extraction');
+  } catch (error) {
+    console.error('[Gemini] PDF extraction error:', error);
+    throw new Error(`Gemini PDF extraction error: ${error instanceof Error ? error.message : 'Unknown API error'}`);
+  }
+}
