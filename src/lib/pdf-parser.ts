@@ -135,54 +135,33 @@ export async function extractTextFromPDF(
   const metadata = await pdf.getMetadata().catch(() => null);
   const info = metadata?.info as Record<string, string> | undefined;
 
-  // Extract text from each page
-  console.log('[PDF] Extracting text from', pageCount, 'pages...');
-  const textParts: string[] = [];
+  // Extract text from ALL pages in parallel (much faster)
+  console.log('[PDF] Extracting text from', pageCount, 'pages in parallel...');
+  const textParts: string[] = new Array(pageCount).fill('');
 
-  for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+  // Create all page extraction promises at once
+  const extractPage = async (pageNum: number): Promise<void> => {
     try {
-      const page = await withTimeout(
-        pdf.getPage(pageNum),
-        10000,
-        `Getting page ${pageNum}`
-      );
-      const textContent = await withTimeout(
-        page.getTextContent(),
-        10000,
-        `Extracting text from page ${pageNum}`
-      );
-
-      // Combine text items into a string
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
       const pageText = textContent.items
-        .map((item) => {
-          if ('str' in item) {
-            return (item as TextItem).str;
-          }
-          return '';
-        })
+        .map((item) => ('str' in item ? (item as TextItem).str : ''))
         .join(' ');
-
-      textParts.push(pageText);
-
-      // Report progress
-      if (onProgress) {
-        onProgress({
-          currentPage: pageNum,
-          totalPages: pageCount,
-          percent: Math.round((pageNum / pageCount) * 100),
-        });
-      }
-
-      // Log every 10 pages
-      if (pageNum % 10 === 0) {
-        console.log(`[PDF] Processed ${pageNum}/${pageCount} pages`);
-      }
-    } catch (pageError) {
-      console.error(`[PDF] Error on page ${pageNum}:`, pageError);
-      // Continue with other pages even if one fails
-      textParts.push('');
+      textParts[pageNum - 1] = pageText;
+    } catch (err) {
+      console.error(`[PDF] Error on page ${pageNum}:`, err);
     }
+  };
+
+  // Process all pages in parallel
+  const promises = Array.from({ length: pageCount }, (_, i) => extractPage(i + 1));
+  await Promise.all(promises);
+
+  // Report completion
+  if (onProgress) {
+    onProgress({ currentPage: pageCount, totalPages: pageCount, percent: 100 });
   }
+  console.log(`[PDF] Processed all ${pageCount} pages in parallel`);
 
   console.log('[PDF] All pages extracted');
 
