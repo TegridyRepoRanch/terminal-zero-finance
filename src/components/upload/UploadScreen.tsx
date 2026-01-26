@@ -17,7 +17,7 @@ interface UploadScreenProps {
 export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
   const { setFile, setSecFilingData } = useUploadStore();
   const [ticker, setTicker] = useState('');
-  const [isFetching, setIsFetching] = useState(false);
+  const [fetchingType, setFetchingType] = useState<'10-K' | '10-Q' | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [fetchProgress, setFetchProgress] = useState<string | null>(null);
 
@@ -36,7 +36,7 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
       return;
     }
 
-    setIsFetching(true);
+    setFetchingType(type);
     setFetchError(null);
     setFetchProgress(`Looking up ${ticker.toUpperCase()}...`);
 
@@ -68,7 +68,7 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
       console.error('[Upload] SEC fetch error:', error);
       setFetchError(error instanceof Error ? error.message : 'Failed to fetch filing');
     } finally {
-      setIsFetching(false);
+      setFetchingType(null);
       setFetchProgress(null);
     }
   };
@@ -171,25 +171,25 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
                   value={ticker}
                   onChange={(e) => setTicker(e.target.value.toUpperCase())}
                   placeholder="Enter ticker symbol (e.g., AAPL)"
-                  disabled={isFetching || !allKeysConfigured}
+                  disabled={fetchingType !== null || !allKeysConfigured}
                   className="w-full bg-zinc-900 border border-zinc-700 rounded-lg py-3 pl-10 pr-4
                     text-zinc-100 placeholder-zinc-500
                     focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30
                     disabled:opacity-50 disabled:cursor-not-allowed
                     transition-all font-mono text-lg"
-                  onKeyDown={(e) => e.key === 'Enter' && handleFetchFiling('10-K')}
+                  onKeyDown={(e) => e.key === 'Enter' && !fetchingType && handleFetchFiling('10-K')}
                 />
               </div>
               <button
                 type="button"
                 onClick={() => handleFetchFiling('10-K')}
-                disabled={isFetching || !ticker.trim() || !allKeysConfigured}
+                disabled={fetchingType !== null || !ticker.trim() || !allKeysConfigured}
                 className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700
                   text-white font-semibold rounded-lg transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed
                   flex items-center gap-2"
               >
-                {isFetching ? (
+                {fetchingType === '10-K' ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <FileText className="w-4 h-4" />
@@ -199,13 +199,13 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
               <button
                 type="button"
                 onClick={() => handleFetchFiling('10-Q')}
-                disabled={isFetching || !ticker.trim() || !allKeysConfigured}
+                disabled={fetchingType !== null || !ticker.trim() || !allKeysConfigured}
                 className="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700
                   text-white font-semibold rounded-lg transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed
                   flex items-center gap-2"
               >
-                {isFetching ? (
+                {fetchingType === '10-Q' ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <FileText className="w-4 h-4" />
@@ -244,7 +244,7 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
             onFileSelect={handleFileSelect}
             accept=".pdf"
             maxSize={50 * 1024 * 1024}
-            disabled={!allKeysConfigured || isFetching}
+            disabled={!allKeysConfigured || fetchingType !== null}
           />
 
           {/* Skip Option */}
