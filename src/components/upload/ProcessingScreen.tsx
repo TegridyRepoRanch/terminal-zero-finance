@@ -199,7 +199,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           setCurrentStepMessage('Extracting financials via secure backend API...');
 
           try {
-            const prompt = buildExtractionPrompt();
+            const prompt = buildExtractionPrompt(truncatedText);
             const result: LLMExtractionResponse = await extractFinancialsWithBackend(
               truncatedText,
               prompt,
