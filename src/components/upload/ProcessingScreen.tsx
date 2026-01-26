@@ -7,8 +7,10 @@ import { useUploadStore } from '../../store/useUploadStore';
 import { extractTextFromPDF, truncateForLLM } from '../../lib/pdf-parser';
 import { extractFinancialsWithGemini } from '../../lib/gemini-client';
 import { extractFinancialsWithClaude, performFinalReview } from '../../lib/anthropic-client';
+import { extractFinancialsWithBackend, extractFinancialsWithClaudeBackend, performFinalReviewBackend } from '../../lib/backend-client';
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
 import { getConfigMode, getGeminiApiKey, hasGeminiKey, getAnthropicApiKey, hasAnthropicKey } from '../../lib/api-config';
+import { FINANCIAL_EXTRACTION_PROMPT } from '../../lib/prompts';
 import type { ExtractionMetadata, ExtractionWarning, LLMExtractionResponse } from '../../lib/extraction-types';
 
 interface ProcessingScreenProps {
@@ -217,23 +219,37 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
         // Use document text (already truncated if from PDF, or from SEC filing)
         const truncatedText = documentText;
-        console.log('[Processing] Using document text, length:', truncatedText.length);        // Step 2: Gemini Flash extraction (fast first pass)
+        console.log('[Processing] Using document text, length:', truncatedText.length);
+
+        // Determine if we're using backend or legacy mode
+        const useBackend = configMode === 'backend';
+        console.log('[Processing] Using backend mode:', useBackend);
+
+        // Step 2: Gemini Flash extraction (fast first pass)
         console.log('[Processing] Step 2: Gemini Flash extraction...');
         updateStep('flash', 'active');
         setStatus('extracting', 'Gemini 3 Flash (pass 1)...');
         setCurrentStepMessage('Running extraction pass 1 with Gemini 3 Flash (fast)...');
 
         try {
-          if (!geminiApiKey) {
-            throw new Error('Gemini API key not available. Please add VITE_GEMINI_API_KEY to your environment.');
+          if (useBackend) {
+            flashResult = await extractFinancialsWithBackend(
+              truncatedText,
+              FINANCIAL_EXTRACTION_PROMPT,
+              (message: string) => setCurrentStepMessage(message),
+              true // useFlash = true
+            );
+          } else {
+            if (!geminiApiKey) {
+              throw new Error('Gemini API key not available. Please add VITE_GEMINI_API_KEY to your environment.');
+            }
+            flashResult = await extractFinancialsWithGemini(
+              truncatedText,
+              geminiApiKey,
+              (message: string) => setCurrentStepMessage(message),
+              true // useFlash = true
+            );
           }
-
-          flashResult = await extractFinancialsWithGemini(
-            truncatedText,
-            geminiApiKey,
-            (message: string) => setCurrentStepMessage(message),
-            true // useFlash = true
-          );
           console.log('[Processing] Gemini Flash extraction complete, confidence:', flashResult.confidence.overall);
 
           // Log extraction notes for debugging
@@ -264,12 +280,21 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         setCurrentStepMessage('Running extraction pass 2 with Gemini 3 Pro (accurate)...');
 
         try {
-          proResult = await extractFinancialsWithGemini(
-            truncatedText,
-            geminiApiKey,
-            (message: string) => setCurrentStepMessage(message),
-            false // useFlash = false (use Pro)
-          );
+          if (useBackend) {
+            proResult = await extractFinancialsWithBackend(
+              truncatedText,
+              FINANCIAL_EXTRACTION_PROMPT,
+              (message: string) => setCurrentStepMessage(message),
+              false // useFlash = false (use Pro)
+            );
+          } else {
+            proResult = await extractFinancialsWithGemini(
+              truncatedText,
+              geminiApiKey,
+              (message: string) => setCurrentStepMessage(message),
+              false // useFlash = false (use Pro)
+            );
+          }
           console.log('[Processing] Gemini Pro extraction complete');
           updateStep('pro', 'complete');
         } catch (proError) {
@@ -284,20 +309,29 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         currentStep++;
         setProgress(progressForStep(0));
 
-        // Step 4: Claude Opus extraction (if API key available)
+        // Step 4: Claude Opus extraction (backend mode always has access, legacy needs key)
         console.log('[Processing] Step 4: Claude Opus extraction...');
         updateStep('claude', 'active');
 
-        if (anthropicApiKey) {
+        const canUseClaude = useBackend || !!anthropicApiKey;
+        if (canUseClaude) {
           setStatus('extracting', 'Claude Opus (pass 3)...');
           setCurrentStepMessage('Running extraction pass 3 with Claude Opus (best reasoning)...');
 
           try {
-            claudeResult = await extractFinancialsWithClaude(
-              truncatedText,
-              anthropicApiKey,
-              (message: string) => setCurrentStepMessage(message)
-            );
+            if (useBackend) {
+              claudeResult = await extractFinancialsWithClaudeBackend(
+                truncatedText,
+                FINANCIAL_EXTRACTION_PROMPT,
+                (message: string) => setCurrentStepMessage(message)
+              );
+            } else {
+              claudeResult = await extractFinancialsWithClaude(
+                truncatedText,
+                anthropicApiKey,
+                (message: string) => setCurrentStepMessage(message)
+              );
+            }
             console.log('[Processing] Claude Opus extraction complete');
             updateStep('claude', 'complete');
           } catch (claudeError) {
@@ -326,16 +360,30 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
         let finalResult: LLMExtractionResponse & { validationSummary?: { agreementRate: number; majorDiscrepancies: string[]; resolvedBy: string; notes: string } };
 
-        if (anthropicApiKey && flashResult && proResult && claudeResult) {
+        if (canUseClaude && flashResult && proResult && claudeResult) {
           try {
-            finalResult = await performFinalReview(
-              flashResult,
-              proResult,
-              claudeResult,
-              truncatedText,
-              anthropicApiKey,
-              (message: string) => setCurrentStepMessage(message)
-            );
+            if (useBackend) {
+              // Build the final review prompt for backend
+              const finalReviewPrompt = JSON.stringify({
+                flash: flashResult,
+                pro: proResult,
+                claude: claudeResult,
+                sourceText: truncatedText.substring(0, 50000), // Limit source text for prompt size
+              });
+              finalResult = await performFinalReviewBackend(
+                finalReviewPrompt,
+                (message: string) => setCurrentStepMessage(message)
+              ) as LLMExtractionResponse & { validationSummary?: { agreementRate: number; majorDiscrepancies: string[]; resolvedBy: string; notes: string } };
+            } else {
+              finalResult = await performFinalReview(
+                flashResult,
+                proResult,
+                claudeResult,
+                truncatedText,
+                anthropicApiKey,
+                (message: string) => setCurrentStepMessage(message)
+              );
+            }
             console.log('[Processing] Final validation complete');
 
             // Add validation summary to notes
@@ -359,8 +407,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             finalResult = proResult!;
           }
         } else {
-          // No Claude API key - just use the best Gemini result (Pro)
-          console.log('[Processing] Using Gemini Pro as final result (no Claude API key)');
+          // No Claude access - just use the best Gemini result (Pro)
+          console.log('[Processing] Using Gemini Pro as final result (no Claude access)');
           finalResult = proResult!;
           finalResult.financials.extractionNotes.push(
             'Note: Single-model extraction (Claude Opus validation not available)'
