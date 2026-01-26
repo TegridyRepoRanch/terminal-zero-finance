@@ -5,8 +5,8 @@ import { AppError } from '../middleware/errorHandler.js';
 
 // Gemini Models
 const GEMINI_MODELS = {
-  FLASH: 'gemini-3-flash-preview',
-  PRO: 'gemini-3-pro-preview',
+  FLASH: 'gemini-2.0-flash',
+  PRO: 'gemini-1.5-pro',
 } as const;
 
 // Gemini Configuration

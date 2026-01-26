@@ -86,13 +86,21 @@ app.get('/health', (_req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
-    test: 'sec-only',
+    geminiConfigured: !!config.geminiApiKey,
+    anthropicConfigured: !!config.anthropicApiKey,
+    csrfEnabled: config.csrfEnabled,
   });
 });
 
 // Root
 app.get('/', (_req, res) => {
-  res.json({ name: 'Terminal Zero Finance API', version: '1.0.3-sec', status: 'running' });
+  res.json({
+    name: 'Terminal Zero Finance API',
+    version: '1.0.4',
+    status: 'running',
+    geminiConfigured: !!config.geminiApiKey,
+    anthropicConfigured: !!config.anthropicApiKey,
+  });
 });
 
 // 404
