@@ -291,7 +291,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [file, onComplete, onError, setError, setStatus, setProgress, setExtractedData, setDerivedMetrics, setMetadata, steps.length, startTime]);
+  }, [file]); // Only re-run when file changes - Zustand setters are stable
 
   const getStepIcon = (step: ProcessingStep) => {
     const { status, icon } = step;
