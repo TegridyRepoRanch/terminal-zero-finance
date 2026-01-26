@@ -181,7 +181,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
               throw new Error('Could not extract text from PDF. The file may be scanned or corrupted.');
             }
 
-            documentText = truncateForLLM(pdfData.text, 120000);
+            documentText = truncateForLLM(pdfData.text); // Uses default 60k limit for faster processing
           } catch (parseError) {
             console.error('[Processing] PDF parse error:', parseError);
             throw new Error(`PDF parsing failed: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);

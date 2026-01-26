@@ -112,7 +112,7 @@ export async function extractTextFromPDF(
  * Intelligently truncate text for LLM while preserving financial content.
  * For 10-K/10-Q filings, prioritizes Item 8 (Financial Statements) content.
  */
-export function truncateForLLM(text: string, maxLength: number = 120000): string {
+export function truncateForLLM(text: string, maxLength: number = 60000): string {
   if (text.length <= maxLength) {
     return text;
   }
