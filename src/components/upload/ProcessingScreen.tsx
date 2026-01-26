@@ -6,9 +6,10 @@ import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Brain,
 import { useUploadStore } from '../../store/useUploadStore';
 import { extractTextFromPDF, truncateForLLM } from '../../lib/pdf-parser';
 import { extractFinancialsWithGemini } from '../../lib/gemini-client';
+import { extractFinancialsWithClaude, performFinalReview } from '../../lib/anthropic-client';
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
-import { getConfigMode, getGeminiApiKey, hasGeminiKey } from '../../lib/api-config';
-import type { ExtractionMetadata, ExtractionWarning } from '../../lib/extraction-types';
+import { getConfigMode, getGeminiApiKey, hasGeminiKey, getAnthropicApiKey, hasAnthropicKey } from '../../lib/api-config';
+import type { ExtractionMetadata, ExtractionWarning, LLMExtractionResponse } from '../../lib/extraction-types';
 
 interface ProcessingScreenProps {
   onComplete: () => void;
@@ -179,50 +180,169 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         let finalConfidence;
         let allWarnings: ExtractionWarning[] = [];
 
-        // Step 2: AI Analysis - Send extracted text to Gemini
-        console.log('[Processing] Step 2: AI Analysis...');
-        updateStep('flash', 'active');
-        setStatus('extracting', 'Analyzing with Gemini Flash...');
-        setCurrentStepMessage('Sending extracted text to Gemini for analysis...');
+        // Get Anthropic API key if available
+        let anthropicApiKey: string = '';
+        if (hasAnthropicKey()) {
+          try {
+            anthropicApiKey = getAnthropicApiKey();
+          } catch {
+            console.warn('[Processing] Anthropic API key not available, Claude steps will be skipped');
+          }
+        }
 
-        // Truncate text if too long for LLM context
+        // Store extraction results for final comparison
+        let flashResult: LLMExtractionResponse | null = null;
+        let proResult: LLMExtractionResponse | null = null;
+        let claudeResult: LLMExtractionResponse | null = null;
+
+        // Truncate text for LLM context
         const truncatedText = truncateForLLM(pdfData.text, 100000);
         console.log('[Processing] Text length after truncation:', truncatedText.length);
 
-        let extractionResult;
+        // Step 2: Gemini Flash extraction (fast first pass)
+        console.log('[Processing] Step 2: Gemini Flash extraction...');
+        updateStep('flash', 'active');
+        setStatus('extracting', 'Gemini 3 Flash (pass 1)...');
+        setCurrentStepMessage('Running extraction pass 1 with Gemini 3 Flash (fast)...');
+
         try {
           if (!geminiApiKey) {
             throw new Error('Gemini API key not available. Please add VITE_GEMINI_API_KEY to your environment.');
           }
 
-          // Use text-based extraction (faster than raw PDF)
-          console.log('[Processing] Using text-based Gemini extraction...');
-          setCurrentStepMessage('Gemini Flash is analyzing the extracted text...');
-
-          extractionResult = await extractFinancialsWithGemini(
+          flashResult = await extractFinancialsWithGemini(
             truncatedText,
             geminiApiKey,
             (message: string) => setCurrentStepMessage(message),
-            true // useFlash for speed
+            true // useFlash = true
           );
-
-          console.log('[Processing] Extraction complete');
-
-          finalFinancials = extractionResult.financials;
-          finalConfidence = extractionResult.confidence;
-          allWarnings = extractionResult.warnings || [];
-
-          // Mark remaining steps complete (simplified flow for now)
+          console.log('[Processing] Gemini Flash extraction complete');
           updateStep('flash', 'complete');
-          updateStep('pro', 'complete');
-          updateStep('claude', 'complete');
-          updateStep('review', 'complete');
-          currentStep += 4;
-
-        } catch (extractionError) {
-          console.error('[Processing] Extraction error:', extractionError);
-          throw new Error(`AI extraction failed: ${extractionError instanceof Error ? extractionError.message : 'Unknown error'}`);
+        } catch (flashError) {
+          console.error('[Processing] Gemini Flash error:', flashError);
+          throw new Error(`Gemini Flash extraction failed: ${flashError instanceof Error ? flashError.message : 'Unknown error'}`);
         }
+
+        if (cancelled) return;
+        currentStep++;
+        setProgress(progressForStep(0));
+
+        // Step 3: Gemini Pro extraction (more accurate)
+        console.log('[Processing] Step 3: Gemini Pro extraction...');
+        updateStep('pro', 'active');
+        setStatus('extracting', 'Gemini 3 Pro (pass 2)...');
+        setCurrentStepMessage('Running extraction pass 2 with Gemini 3 Pro (accurate)...');
+
+        try {
+          proResult = await extractFinancialsWithGemini(
+            truncatedText,
+            geminiApiKey,
+            (message: string) => setCurrentStepMessage(message),
+            false // useFlash = false (use Pro)
+          );
+          console.log('[Processing] Gemini Pro extraction complete');
+          updateStep('pro', 'complete');
+        } catch (proError) {
+          console.error('[Processing] Gemini Pro error:', proError);
+          // If Pro fails, use Flash result as fallback
+          console.warn('[Processing] Using Flash result as Pro fallback');
+          proResult = flashResult;
+          updateStep('pro', 'complete');
+        }
+
+        if (cancelled) return;
+        currentStep++;
+        setProgress(progressForStep(0));
+
+        // Step 4: Claude Opus extraction (if API key available)
+        console.log('[Processing] Step 4: Claude Opus extraction...');
+        updateStep('claude', 'active');
+
+        if (anthropicApiKey) {
+          setStatus('extracting', 'Claude Opus (pass 3)...');
+          setCurrentStepMessage('Running extraction pass 3 with Claude Opus (best reasoning)...');
+
+          try {
+            claudeResult = await extractFinancialsWithClaude(
+              truncatedText,
+              anthropicApiKey,
+              (message: string) => setCurrentStepMessage(message)
+            );
+            console.log('[Processing] Claude Opus extraction complete');
+            updateStep('claude', 'complete');
+          } catch (claudeError) {
+            console.error('[Processing] Claude Opus error:', claudeError);
+            // If Claude fails, use Pro result as fallback
+            console.warn('[Processing] Using Pro result as Claude fallback');
+            claudeResult = proResult;
+            updateStep('claude', 'complete');
+          }
+        } else {
+          console.log('[Processing] Skipping Claude (no API key)');
+          setCurrentStepMessage('Skipping Claude Opus (API key not configured)...');
+          claudeResult = proResult;
+          updateStep('claude', 'complete');
+        }
+
+        if (cancelled) return;
+        currentStep++;
+        setProgress(progressForStep(0));
+
+        // Step 5: Final cross-model validation
+        console.log('[Processing] Step 5: Final validation...');
+        updateStep('review', 'active');
+        setStatus('extracting', 'Final validation...');
+        setCurrentStepMessage('Comparing all extractions against source document...');
+
+        let finalResult: LLMExtractionResponse & { validationSummary?: { agreementRate: number; majorDiscrepancies: string[]; resolvedBy: string; notes: string } };
+
+        if (anthropicApiKey && flashResult && proResult && claudeResult) {
+          try {
+            finalResult = await performFinalReview(
+              flashResult,
+              proResult,
+              claudeResult,
+              truncatedText,
+              anthropicApiKey,
+              (message: string) => setCurrentStepMessage(message)
+            );
+            console.log('[Processing] Final validation complete');
+
+            // Add validation summary to notes
+            if (finalResult.validationSummary) {
+              finalResult.financials.extractionNotes.push(
+                `Cross-model agreement rate: ${(finalResult.validationSummary.agreementRate * 100).toFixed(0)}%`,
+                `Validation notes: ${finalResult.validationSummary.notes}`
+              );
+              if (finalResult.validationSummary.majorDiscrepancies.length > 0) {
+                allWarnings.push({
+                  field: 'validation',
+                  message: `Discrepancies found in: ${finalResult.validationSummary.majorDiscrepancies.join(', ')}`,
+                  severity: 'medium',
+                });
+              }
+            }
+          } catch (reviewError) {
+            console.error('[Processing] Final review error:', reviewError);
+            // Fall back to the best single extraction (Pro is typically most reliable)
+            console.warn('[Processing] Using Pro result as final fallback');
+            finalResult = proResult!;
+          }
+        } else {
+          // No Claude API key - just use the best Gemini result (Pro)
+          console.log('[Processing] Using Gemini Pro as final result (no Claude API key)');
+          finalResult = proResult!;
+          finalResult.financials.extractionNotes.push(
+            'Note: Single-model extraction (Claude Opus validation not available)'
+          );
+        }
+
+        updateStep('review', 'complete');
+        currentStep++;
+
+        finalFinancials = finalResult.financials;
+        finalConfidence = finalResult.confidence;
+        allWarnings = [...allWarnings, ...(finalResult.warnings || [])];
 
         if (cancelled) return;
 
