@@ -90,6 +90,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
     // Get API key only for legacy mode
     let geminiApiKey: string = '';
+    let useLegacyFallback = false;
+
     if (configMode === 'legacy') {
       console.log('[Processing] Running in LEGACY mode (frontend API keys)');
       console.log('[Processing] Gemini key present:', hasGeminiKey());
@@ -116,6 +118,15 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       }
     } else {
       console.log('[Processing] Running in BACKEND mode (API keys on server)');
+      // Check if we have legacy keys as fallback
+      if (hasGeminiKey()) {
+        try {
+          geminiApiKey = getGeminiApiKey();
+          console.log('[Processing] Legacy fallback API key available');
+        } catch {
+          // Ignore - we'll try backend first
+        }
+      }
     }
 
     let cancelled = false;
@@ -182,12 +193,32 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             console.log('[Processing] Using backend API for PDF extraction...');
             setCurrentStepMessage('Analyzing PDF via secure backend API...');
 
-            extractionResult = await extractFinancialsFromPDFWithBackend(
-              pdfData.base64Data,
-              pdfData.mimeType,
-              (message: string) => setCurrentStepMessage(message),
-              true // useFlash for speed
-            );
+            try {
+              extractionResult = await extractFinancialsFromPDFWithBackend(
+                pdfData.base64Data,
+                pdfData.mimeType,
+                (message: string) => setCurrentStepMessage(message),
+                true // useFlash for speed
+              );
+            } catch (backendError) {
+              // If backend fails and we have legacy keys, fall back to direct API
+              if (geminiApiKey) {
+                console.warn('[Processing] Backend failed, falling back to legacy mode:', backendError);
+                setCurrentStepMessage('Backend unavailable - using direct Gemini API...');
+                useLegacyFallback = true;
+
+                extractionResult = await extractFinancialsFromPDF(
+                  pdfData.base64Data,
+                  pdfData.mimeType,
+                  geminiApiKey,
+                  (message: string) => setCurrentStepMessage(message),
+                  true // useFlash for speed
+                );
+              } else {
+                // No fallback available, propagate error
+                throw backendError;
+              }
+            }
           }
           // Legacy mode: Direct API call from frontend
           else {
@@ -203,7 +234,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             );
           }
 
-          console.log('[Processing] Extraction complete');
+          console.log('[Processing] Extraction complete', useLegacyFallback ? '(via legacy fallback)' : '');
 
           finalFinancials = extractionResult.financials;
           finalConfidence = extractionResult.confidence;
@@ -416,9 +447,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
                 <div className="h-full w-full bg-gradient-to-r from-cyan-500 via-blue-500 via-orange-500 to-purple-500 animate-pulse" />
               ) : (
                 <div
-                  className={`h-full transition-all duration-500 ease-out ${
-                    errorMessage ? 'bg-red-500' : 'bg-gradient-to-r from-cyan-500 via-blue-500 via-orange-500 to-purple-500'
-                  }`}
+                  className={`h-full transition-all duration-500 ease-out ${errorMessage ? 'bg-red-500' : 'bg-gradient-to-r from-cyan-500 via-blue-500 via-orange-500 to-purple-500'
+                    }`}
                   style={{ width: `${Math.max(progressPercent, 2)}%` }}
                 />
               )}
