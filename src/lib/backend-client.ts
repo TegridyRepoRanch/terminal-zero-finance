@@ -10,16 +10,11 @@ import type {
   ValidationResult,
 } from './gemini-client';
 
-// Backend API configuration from environment variable
-// In production, VITE_BACKEND_URL must be set in Vercel project settings
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-
-// Warn if using default localhost in production
-if (typeof window !== 'undefined' &&
-    window.location.hostname.includes('vercel.app') &&
-    !import.meta.env.VITE_BACKEND_URL) {
-  console.error('[Backend] WARNING: VITE_BACKEND_URL not set in production. Set this in Vercel environment variables.');
-}
+// Backend URL - use env var or auto-detect production
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ||
+    (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+        ? 'https://server-self-eight.vercel.app'
+        : 'http://localhost:3001');
 
 // CSRF token storage
 let csrfToken: string | null = null;
