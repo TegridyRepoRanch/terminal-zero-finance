@@ -14,9 +14,9 @@ import extractionRoutes from '../src/routes/extraction.routes.js';
 import claudeRoutes from '../src/routes/claude.routes.js';
 import secRoutes from '../src/routes/sec.routes.js';
 
-console.log('[Routes] Extraction routes imported:', !!extractionRoutes);
-console.log('[Routes] Claude routes imported:', !!claudeRoutes);
-console.log('[Routes] SEC routes imported:', !!secRoutes);
+console.log('[Routes] Extraction routes imported:', !!extractionRoutes, typeof extractionRoutes);
+console.log('[Routes] Claude routes imported:', !!claudeRoutes, typeof claudeRoutes);
+console.log('[Routes] SEC routes imported:', !!secRoutes, typeof secRoutes);
 
 // Validate configuration (non-fatal - log warnings only)
 try {
@@ -93,6 +93,27 @@ app.get('/health', (_req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
+  });
+});
+
+// Debug endpoint to list all registered routes
+app.get('/debug/routes', (_req, res) => {
+  const routes: string[] = [];
+  app._router.stack.forEach((middleware: any) => {
+    if (middleware.route) {
+      routes.push(`${Object.keys(middleware.route.methods).join(', ').toUpperCase()} ${middleware.route.path}`);
+    } else if (middleware.name === 'router') {
+      middleware.handle.stack.forEach((handler: any) => {
+        if (handler.route) {
+          const path = middleware.regexp.source.replace('\\/?', '').replace('(?=\\/|$)', '').replace(/\\\//g, '/');
+          routes.push(`${Object.keys(handler.route.methods).join(', ').toUpperCase()} ${path}${handler.route.path}`);
+        }
+      });
+    }
+  });
+  res.json({
+    totalRoutes: routes.length,
+    routes: routes.sort(),
   });
 });
 
