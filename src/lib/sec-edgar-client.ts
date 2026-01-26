@@ -2,26 +2,42 @@
 // Uses SEC's free public APIs (no authentication required)
 
 // CORS proxy for SEC API calls (SEC blocks browser cross-origin requests)
-// Using allorigins.win which is free and reliable
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+// Using corsproxy.io which handles large files better than allorigins
+const CORS_PROXY = 'https://corsproxy.io/?';
 
 /**
- * Fetch with CORS proxy - wraps URLs to bypass CORS restrictions
+ * Fetch with CORS proxy and timeout - wraps URLs to bypass CORS restrictions
  */
-async function fetchWithCorsProxy(url: string, options: RequestInit = {}): Promise<Response> {
+async function fetchWithCorsProxy(
+    url: string,
+    timeoutMs: number = 60000
+): Promise<Response> {
     const proxiedUrl = CORS_PROXY + encodeURIComponent(url);
     console.log(`[SEC] Fetching via proxy: ${url}`);
 
-    // Remove User-Agent header (not allowed via proxy)
-    const { headers, ...rest } = options;
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const response = await fetch(proxiedUrl, rest);
+    try {
+        const response = await fetch(proxiedUrl, {
+            signal: controller.signal,
+        });
 
-    if (!response.ok) {
-        throw new Error(`HTTP error: ${response.status}`);
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`);
+        }
+
+        return response;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error(`Request timed out after ${timeoutMs / 1000}s - SEC filing may be too large`);
+        }
+        throw error;
     }
-
-    return response;
 }
 
 // SEC EDGAR API endpoints
