@@ -13,6 +13,7 @@ import { initializeGeminiClient } from './services/gemini.service.js';
 import { initializeAnthropicClient } from './services/anthropic.service.js';
 import extractionRoutes from './routes/extraction.routes.js';
 import claudeRoutes from './routes/claude.routes.js';
+import secRoutes from './routes/sec.routes.js';
 
 // Validate configuration
 try {
@@ -86,6 +87,9 @@ app.post('/api/cache/clear', csrfProtection, clearCache);
 // API routes (with caching and CSRF protection)
 app.use('/api/extraction', cacheMiddleware, csrfProtection, extractionRoutes);
 app.use('/api/claude', cacheMiddleware, csrfProtection, claudeRoutes);
+
+// SEC EDGAR proxy (with caching, no CSRF needed for public data)
+app.use('/api/sec', cacheMiddleware, secRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
