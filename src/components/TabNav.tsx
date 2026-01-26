@@ -7,7 +7,8 @@ import {
     ArrowDownUp,
     Building,
     Landmark,
-    Target
+    Target,
+    MessageSquare
 } from 'lucide-react';
 
 const tabs = [
@@ -17,6 +18,7 @@ const tabs = [
     { id: 'cashflow', label: 'Cash Flow', shortLabel: 'CF', icon: ArrowDownUp, shortcut: '4' },
     { id: 'depreciation', label: 'D&A', shortLabel: 'D&A', icon: Building, shortcut: '5' },
     { id: 'debt', label: 'Debt', shortLabel: 'Debt', icon: Landmark, shortcut: '6' },
+    { id: 'dd', label: 'DD Chat', shortLabel: 'DD', icon: MessageSquare, shortcut: '7' },
 ] as const;
 
 export function TabNav() {

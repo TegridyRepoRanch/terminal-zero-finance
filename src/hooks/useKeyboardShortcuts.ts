@@ -11,7 +11,7 @@ export interface KeyboardShortcut {
   action: () => void;
 }
 
-const TAB_ORDER = ['income', 'balance', 'cashflow', 'depreciation', 'debt', 'valuation'] as const;
+const TAB_ORDER = ['valuation', 'income', 'balance', 'cashflow', 'depreciation', 'debt', 'dd'] as const;
 
 export function useKeyboardShortcuts() {
   const { activeTab, setActiveTab, resetToDefaults } = useFinanceStore();
@@ -29,8 +29,8 @@ export function useKeyboardShortcuts() {
 
       const { key, ctrlKey, altKey, shiftKey } = event;
 
-      // Tab navigation with number keys (1-6)
-      if (!ctrlKey && !altKey && !shiftKey && key >= '1' && key <= '6') {
+      // Tab navigation with number keys (1-7)
+      if (!ctrlKey && !altKey && !shiftKey && key >= '1' && key <= '7') {
         const tabIndex = parseInt(key) - 1;
         if (tabIndex < TAB_ORDER.length) {
           event.preventDefault();
@@ -97,7 +97,7 @@ export function useKeyboardShortcuts() {
 }
 
 export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
-  { key: '1-6', description: 'Switch to tab 1-6' },
+  { key: '1-7', description: 'Switch to tab 1-7' },
   { key: '←/→', description: 'Navigate between tabs' },
   { key: '?', description: 'Show keyboard shortcuts' },
   { key: 'Escape', description: 'Close dialogs' },

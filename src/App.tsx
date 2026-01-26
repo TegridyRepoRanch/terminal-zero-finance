@@ -22,6 +22,7 @@ const CashFlowStatement = lazy(() => import('./components/CashFlowStatement').th
 const DepreciationSchedule = lazy(() => import('./components/DepreciationSchedule').then(m => ({ default: m.DepreciationSchedule })));
 const DebtSchedule = lazy(() => import('./components/DebtSchedule').then(m => ({ default: m.DebtSchedule })));
 const ValuationEngine = lazy(() => import('./components/ValuationEngine').then(m => ({ default: m.ValuationEngine })));
+const DDChat = lazy(() => import('./components/dd/DDChat'));
 
 // Lazy load upload flow (includes PDF.js)
 const UploadScreen = lazy(() => import('./components/upload').then(m => ({ default: m.UploadScreen })));
@@ -222,6 +223,8 @@ function MainContent() {
         return <DebtSchedule />;
       case 'valuation':
         return <ValuationEngine />;
+      case 'dd':
+        return <DDChat />;
       default:
         return <ValuationEngine />;
     }
@@ -279,7 +282,7 @@ export default function App() {
   const [showConfigBanner, setShowConfigBanner] = useState(true);
   const [configValidation, setConfigValidation] = useState(() => validateConfig());
   const { setAssumptionsFromExtraction, refreshStockPrice } = useFinanceStore();
-  const { metadata, reset: resetUpload } = useUploadStore();
+  const { metadata, reset: resetUpload, setForceReextract } = useUploadStore();
 
   // Validate configuration on mount
   useEffect(() => {
@@ -343,6 +346,13 @@ export default function App() {
     setView('upload');
   };
 
+  const handleForceReextract = () => {
+    // Set the force flag and go back to processing
+    // The processing screen will skip cache and delete old entry
+    setForceReextract(true);
+    setView('processing');
+  };
+
   // Render content based on current view
   const renderView = () => {
     switch (view) {
@@ -368,6 +378,7 @@ export default function App() {
           <ReviewScreen
             onProceed={handleReviewProceed}
             onBack={handleReviewBack}
+            onForceReextract={handleForceReextract}
           />
         );
 
