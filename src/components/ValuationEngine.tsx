@@ -15,6 +15,7 @@ import {
     QuarterlyProjections,
 } from './analysis';
 import { ExportMenu } from './ExportMenu';
+import { FinancialStatementsView } from './FinancialStatementsView';
 import { cn } from '../lib/utils';
 
 interface StatCardProps {
@@ -78,6 +79,7 @@ export function ValuationEngine() {
     const [activeAdvancedTab, setActiveAdvancedTab] = useState<AdvancedChartTab>('waterfall');
     const [activeAnalysisTab, setActiveAnalysisTab] = useState<AnalysisTab>('sensitivity');
     const [showAnalysis, setShowAnalysis] = useState(true);
+    const [showStatements, setShowStatements] = useState(true);
 
     // Prepare chart data for UFCF
     const ufcfChartData = cashFlow.map((cf) => ({
@@ -398,6 +400,26 @@ export function ValuationEngine() {
                             {activeAnalysisTab === 'quarterly' && <QuarterlyProjections />}
                         </div>
                     </>
+                )}
+            </div>
+
+            {/* Financial Statements Section */}
+            <div className="bg-zinc-900/30 rounded-lg border border-zinc-800 overflow-hidden">
+                <button
+                    onClick={() => setShowStatements(!showStatements)}
+                    className="w-full px-4 py-3 border-b border-zinc-800 bg-zinc-900/80 flex items-center justify-between hover:bg-zinc-900 transition-colors"
+                >
+                    <div>
+                        <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider">Financial Statements</h2>
+                        <p className="text-xs text-zinc-500 mt-0.5">Income, Balance Sheet, Cash Flow, Depreciation, Debt schedules</p>
+                    </div>
+                    {showStatements ? <ChevronUp size={16} className="text-zinc-500" /> : <ChevronDown size={16} className="text-zinc-500" />}
+                </button>
+
+                {showStatements && (
+                    <div className="p-0">
+                        <FinancialStatementsView />
+                    </div>
                 )}
             </div>
         </div>
