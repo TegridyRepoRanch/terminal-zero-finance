@@ -6,16 +6,16 @@ import { getConfigMode } from './api-config';
 
 // Backend URL - auto-detect in production
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ||
-  (window.location.hostname.includes('vercel.app')
-    ? 'https://terminal-zero-finance-fyk1.vercel.app'
-    : 'http://localhost:3001');
+    (window.location.hostname.includes('vercel.app')
+        ? 'https://server-amber-phi.vercel.app'
+        : 'http://localhost:3001');
 
 // Check if backend mode is configured
 function useBackend(): boolean {
-  const mode = getConfigMode();
-  console.log('[SEC] Config mode:', mode, 'Backend URL:', BACKEND_URL);
-  // Always try backend first in production
-  return mode === 'backend' || window.location.hostname.includes('vercel.app');
+    const mode = getConfigMode();
+    console.log('[SEC] Config mode:', mode, 'Backend URL:', BACKEND_URL);
+    // Always try backend first in production
+    return mode === 'backend' || window.location.hostname.includes('vercel.app');
 }
 
 // CORS proxies - fallback for when backend is unavailable

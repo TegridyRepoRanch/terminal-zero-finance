@@ -8,102 +8,60 @@ import { config, validateConfig } from '../src/config.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { csrfTokenGenerator, csrfProtection, csrfErrorHandler } from '../src/middleware/csrf.js';
 import { cacheMiddleware, getCacheStats, clearCache } from '../src/middleware/cache.js';
-import { initializeGeminiClient } from '../src/services/gemini.service.js';
-import { initializeAnthropicClient } from '../src/services/anthropic.service.js';
-import extractionRoutes from '../src/routes/extraction.routes.js';
-import claudeRoutes from '../src/routes/claude.routes.js';
+
+// Skip AI services for now
+// import { initializeGeminiClient } from '../src/services/gemini.service.js';
+// import { initializeAnthropicClient } from '../src/services/anthropic.service.js';
+// import extractionRoutes from '../src/routes/extraction.routes.js';
+// import claudeRoutes from '../src/routes/claude.routes.js';
+
 import secRoutes from '../src/routes/sec.routes.js';
 
-console.log('[Routes] Extraction routes imported:', !!extractionRoutes, typeof extractionRoutes);
-console.log('[Routes] Claude routes imported:', !!claudeRoutes, typeof claudeRoutes);
-console.log('[Routes] SEC routes imported:', !!secRoutes, typeof secRoutes);
-
-// Validate configuration (non-fatal - log warnings only)
-try {
-  validateConfig();
-  console.log('[Config] Validation passed');
-} catch (error) {
-  console.warn('[Config] Validation failed:', error);
-  console.warn('[Config] Server will start but some features may be unavailable');
-}
-
-// Initialize AI clients
-initializeGeminiClient();
-initializeAnthropicClient();
-
-// Create Express app
 const app = express();
 
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: false,
-}));
+// Validate config (non-fatal)
+try {
+  validateConfig();
+} catch (error) {
+  console.warn('[Config] Validation warning:', error);
+}
 
-// CORS configuration
+// Middleware
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (config.allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.warn(`[CORS] Blocked request from origin: ${origin}`);
+      console.warn(`[CORS] Blocked: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
 }));
 
-// Rate limiting
 const limiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMaxRequests,
-  message: 'Too many requests from this IP, please try again later.',
+  message: 'Too many requests',
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 app.use('/api/', limiter);
-
-// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Cookie parser
 app.use(cookieParser());
 
 // CSRF token endpoint
 app.get('/api/csrf-token', csrfTokenGenerator);
 
-// Cache management endpoints
+// Cache management
 app.get('/api/cache/stats', getCacheStats);
 app.post('/api/cache/clear', csrfProtection, clearCache);
 
-// API routes
-app.use('/api/extraction', cacheMiddleware, csrfProtection, extractionRoutes);
-console.log('[Routes] Registered /api/extraction');
-app.use('/api/claude', cacheMiddleware, csrfProtection, claudeRoutes);
-console.log('[Routes] Registered /api/claude');
-// SEC EDGAR proxy (no CSRF needed for public data)
-console.log('[Routes] About to register SEC routes, secRoutes is:', typeof secRoutes, secRoutes ? 'truthy' : 'falsy');
-if (secRoutes) {
-  app.use('/api/sec', cacheMiddleware, secRoutes);
-  console.log('[Routes] Registered /api/sec (no CSRF)');
-} else {
-  console.error('[Routes] SEC routes failed to import!');
-  // Add fallback direct route for debugging
-  app.get('/api/sec/test', (_req, res) => {
-    res.json({ error: 'SEC routes failed to import', secRoutesType: typeof secRoutes });
-  });
-}
-
-// Direct SEC test endpoint (bypass router)
-app.get('/api/sec-test', (_req, res) => {
-  res.json({
-    message: 'Direct SEC test endpoint',
-    secRoutesImported: !!secRoutes,
-    secRoutesType: typeof secRoutes
-  });
-});
+// SEC routes only
+app.use('/api/sec', cacheMiddleware, secRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -111,52 +69,22 @@ app.get('/health', (_req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
-    version: '1.0.3', // Version to verify deployment
-    secRoutesLoaded: !!secRoutes,
+    test: 'sec-only',
   });
 });
 
-// Debug endpoint to list all registered routes
-app.get('/debug/routes', (_req, res) => {
-  const routes: string[] = [];
-  app._router.stack.forEach((middleware: any) => {
-    if (middleware.route) {
-      routes.push(`${Object.keys(middleware.route.methods).join(', ').toUpperCase()} ${middleware.route.path}`);
-    } else if (middleware.name === 'router') {
-      middleware.handle.stack.forEach((handler: any) => {
-        if (handler.route) {
-          const path = middleware.regexp.source.replace('\\/?', '').replace('(?=\\/|$)', '').replace(/\\\//g, '/');
-          routes.push(`${Object.keys(handler.route.methods).join(', ').toUpperCase()} ${path}${handler.route.path}`);
-        }
-      });
-    }
-  });
-  res.json({
-    totalRoutes: routes.length,
-    routes: routes.sort(),
-  });
-});
-
-// Root endpoint
+// Root
 app.get('/', (_req, res) => {
-  res.json({
-    name: 'Terminal Zero Finance API',
-    version: '1.0.0',
-    status: 'running',
-  });
+  res.json({ name: 'Terminal Zero Finance API', version: '1.0.3-sec', status: 'running' });
 });
 
-// 404 handler
+// 404
 app.use((_req, res) => {
-  res.status(404).json({
-    error: 'Endpoint not found',
-    status: 'error',
-  });
+  res.status(404).json({ error: 'Endpoint not found', status: 'error' });
 });
 
 // Error handlers
 app.use(csrfErrorHandler);
 app.use(errorHandler);
 
-// Export for Vercel
 export default app;
