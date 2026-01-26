@@ -83,8 +83,9 @@ app.use('/api/extraction', cacheMiddleware, csrfProtection, extractionRoutes);
 console.log('[Routes] Registered /api/extraction');
 app.use('/api/claude', cacheMiddleware, csrfProtection, claudeRoutes);
 console.log('[Routes] Registered /api/claude');
-app.use('/api/sec', cacheMiddleware, csrfProtection, secRoutes);
-console.log('[Routes] Registered /api/sec');
+// SEC EDGAR proxy (no CSRF needed for public data)
+app.use('/api/sec', cacheMiddleware, secRoutes);
+console.log('[Routes] Registered /api/sec (no CSRF)');
 
 // Health check
 app.get('/health', (_req, res) => {
