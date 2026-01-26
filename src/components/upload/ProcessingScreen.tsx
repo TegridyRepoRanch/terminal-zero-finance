@@ -359,25 +359,6 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         setStatus('mapping', 'Processing final results...');
         setCurrentStepMessage('Calculating derived metrics...');
 
-        const finalFinancials = finalResult.financials;
-        const finalConfidence = finalResult.confidence;
-        let allWarnings: ExtractionWarning[] = [...(finalResult.warnings || [])];
-
-        // Add validation summary to notes
-        if (finalResult.validationSummary) {
-          finalFinancials.extractionNotes.push(
-            `Cross-model agreement rate: ${(finalResult.validationSummary.agreementRate * 100).toFixed(0)}%`,
-            `Validation notes: ${finalResult.validationSummary.notes}`
-          );
-          if (finalResult.validationSummary.majorDiscrepancies.length > 0) {
-            allWarnings.push({
-              field: 'validation',
-              message: `Discrepancies found in: ${finalResult.validationSummary.majorDiscrepancies.join(', ')}`,
-              severity: 'medium',
-            });
-          }
-        }
-
         const derivedMetrics = calculateDerivedMetrics(finalFinancials);
         const assumptions = mapToAssumptions(finalFinancials, derivedMetrics);
         const validationWarnings = validateAssumptions(assumptions, finalFinancials);
