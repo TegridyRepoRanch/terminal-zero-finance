@@ -25,7 +25,7 @@ export const config = {
   rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
 
   // Timeouts
-  geminiTimeout: 120000, // 2 minutes
+  geminiTimeout: 170000, // ~3 minutes (just under Vercel's 180s limit)
 
   // Validation
   maxTextLength: 500000, // 500KB max text input
