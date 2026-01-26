@@ -71,8 +71,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
   };
 
   useEffect(() => {
-    if (!file) {
-      setError('No file selected');
+    if (!file && !secFilingData) {
+      setError('No file or SEC filing data available');
       onError();
       return;
     }
