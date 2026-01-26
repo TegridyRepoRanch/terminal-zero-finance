@@ -38,12 +38,21 @@ const { generateCsrfToken, doubleCsrfProtection } = csrfProtectionUtils;
  * @param res - Express response object
  */
 export function csrfTokenGenerator(req: Request, res: Response) {
-  // Generate the CSRF token and set the cookie
-  const token = generateCsrfToken(req, res);
-  res.json({
-    token,
-    success: true,
-  });
+  try {
+    // Generate the CSRF token and set the cookie
+    const token = generateCsrfToken(req, res);
+    res.json({
+      token,
+      success: true,
+    });
+  } catch (error) {
+    console.error('[CSRF] Token generation error:', error);
+    res.status(500).json({
+      error: 'Failed to generate CSRF token',
+      success: false,
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
 }
 
 /**
