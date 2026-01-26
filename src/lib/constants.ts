@@ -110,9 +110,9 @@ export const VALIDATION_LIMITS = {
   DPO_MAX: 120,
   DPO_WARNING: 90,
 
-  // Projection period
+  // Projection period (extended to 20 for infrastructure/mining sectors)
   MIN_PROJECTION_YEARS: 1,
-  MAX_PROJECTION_YEARS: 10,
+  MAX_PROJECTION_YEARS: 20,
 
   // Valuation
   WACC_MIN: 5,

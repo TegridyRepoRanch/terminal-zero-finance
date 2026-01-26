@@ -2,6 +2,20 @@
 
 export type FilingType = '10-K' | '10-Q' | 'unknown';
 
+// Source citation for verifying AI extraction accuracy
+export interface SourceCitation {
+  fieldName: string;
+  extractedValue: number | string;
+  sourceText: string; // The text snippet from the filing
+  sourceLocation?: string; // e.g., "Page 45, Item 8"
+  confidence: number; // 0-1
+}
+
+// Collection of source citations for all extracted fields
+export interface SourceCitations {
+  [fieldName: string]: SourceCitation;
+}
+
 export type ExtractionStatus =
   | 'idle'
   | 'uploading'
@@ -129,6 +143,8 @@ export interface ExtractionMetadata {
   confidence: number;
   pageCount: number;
   processingTimeMs: number;
+  sourceCitations?: SourceCitations; // Source citations for verification
+  rawSourceText?: string; // Original filing text (truncated)
 }
 
 // LLM Response structure (what we expect from GPT-4)
@@ -136,4 +152,5 @@ export interface LLMExtractionResponse {
   financials: ExtractedFinancials;
   confidence: ExtractionConfidence;
   warnings: ExtractionWarning[];
+  sourceCitations?: SourceCitations; // Optional source citations for verification
 }

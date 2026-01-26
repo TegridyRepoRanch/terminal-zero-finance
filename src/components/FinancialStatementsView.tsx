@@ -2,16 +2,17 @@
 // View all 6 projected financial statements
 
 import { useState } from 'react';
-import { FileText, TrendingUp, Wallet, DollarSign, Calculator, PieChart } from 'lucide-react';
+import { FileText, TrendingUp, Wallet, DollarSign, Calculator, PieChart, Search } from 'lucide-react';
 import { IncomeStatement } from './IncomeStatement';
 import { BalanceSheet } from './BalanceSheet';
 import { CashFlowStatement } from './CashFlowStatement';
 import { DepreciationSchedule } from './DepreciationSchedule';
 import { DebtSchedule } from './DebtSchedule';
+import { SourceVerificationView } from './SourceVerificationView';
 import { cn } from '../lib/utils';
 import type { CashFlowRow } from '../lib/financial-logic';
 
-type StatementTab = 'income' | 'balance' | 'cashflow' | 'depreciation' | 'debt' | 'dcf';
+type StatementTab = 'income' | 'balance' | 'cashflow' | 'depreciation' | 'debt' | 'dcf' | 'verification';
 
 interface TabConfig {
   id: StatementTab;
@@ -63,6 +64,13 @@ const tabs: TabConfig[] = [
     shortLabel: 'DCF',
     icon: <PieChart size={16} />,
     description: 'Discounted cash flow valuation summary',
+  },
+  {
+    id: 'verification',
+    label: 'Source Verification',
+    shortLabel: 'Verify',
+    icon: <Search size={16} />,
+    description: 'Compare extracted values with source document',
   },
 ];
 
@@ -189,6 +197,8 @@ export function FinancialStatementsView() {
         return <DebtSchedule />;
       case 'dcf':
         return <DCFSummary />;
+      case 'verification':
+        return <SourceVerificationView />;
       default:
         return null;
     }

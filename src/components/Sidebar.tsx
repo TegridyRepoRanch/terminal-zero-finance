@@ -343,8 +343,8 @@ export function Sidebar() {
                         onChange={(v) => updateAssumption('projectionYears', v)}
                         suffix="yrs"
                         step={1}
-                        min={3}
-                        max={10}
+                        min={1}
+                        max={20}
                         decimals={0}
                     />
                 </Section>

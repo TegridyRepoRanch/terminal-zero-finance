@@ -12,6 +12,8 @@ import { AlertTriangle, X, Info } from 'lucide-react';
 import type { Assumptions } from './lib/financial-logic';
 import { validateConfig, getConfigMode } from './lib/api-config';
 import { fetchCsrfToken } from './lib/backend-client';
+import { AuthProvider } from './contexts/AuthContext';
+import { UserMenu } from './components/AuthModal';
 
 // Lazy load heavy components
 const IncomeStatement = lazy(() => import('./components/IncomeStatement').then(m => ({ default: m.IncomeStatement })));
@@ -239,8 +241,9 @@ function MainContent() {
               <p className="text-xs text-zinc-500">Real-time DCF Valuation</p>
             </div>
             <TickerSearch />
-            <div className="ml-auto sm:ml-0 flex items-center gap-1">
+            <div className="ml-auto sm:ml-0 flex items-center gap-2">
               <ThemeToggle />
+              <UserMenu />
             </div>
           </div>
           <TabNav />
@@ -385,8 +388,9 @@ export default function App() {
   }
 
   return (
-    <PageErrorBoundary>
-      <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300 dark:bg-zinc-950 dark:text-zinc-300">
+    <AuthProvider>
+      <PageErrorBoundary>
+        <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300 dark:bg-zinc-950 dark:text-zinc-300">
         {/* Skip to content link for keyboard accessibility */}
         <a
           href="#main-content"
@@ -432,7 +436,8 @@ export default function App() {
             {renderView()}
           </Suspense>
         </SectionErrorBoundary>
-      </div>
-    </PageErrorBoundary>
+        </div>
+      </PageErrorBoundary>
+    </AuthProvider>
   );
 }

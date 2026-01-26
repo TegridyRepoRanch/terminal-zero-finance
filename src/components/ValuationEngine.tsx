@@ -16,6 +16,7 @@ import {
 } from './analysis';
 import { ExportMenu } from './ExportMenu';
 import { FinancialStatementsView } from './FinancialStatementsView';
+import { ScenarioSelector } from './ScenarioSelector';
 import { cn } from '../lib/utils';
 
 interface StatCardProps {
@@ -120,6 +121,9 @@ export function ValuationEngine() {
                 </div>
                 <ExportMenu />
             </div>
+
+            {/* Scenario Selector */}
+            <ScenarioSelector />
 
             {/* Key Metrics */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
