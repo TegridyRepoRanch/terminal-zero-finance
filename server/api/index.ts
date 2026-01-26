@@ -27,12 +27,16 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
+    // Allow explicit origins
     if (config.allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`[CORS] Blocked: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+      return callback(null, true);
     }
+    // Allow any vercel.app subdomain (preview deployments)
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    console.warn(`[CORS] Blocked: ${origin}`);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
 }));
