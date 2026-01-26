@@ -1,7 +1,28 @@
 // SEC EDGAR Client - Fetch SEC filings by ticker symbol
 // Uses SEC's free public APIs (no authentication required)
 
-const SEC_USER_AGENT = 'Terminal-Zero-Finance support@example.com';
+// CORS proxy for SEC API calls (SEC blocks browser cross-origin requests)
+// Using allorigins.win which is free and reliable
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+/**
+ * Fetch with CORS proxy - wraps URLs to bypass CORS restrictions
+ */
+async function fetchWithCorsProxy(url: string, options: RequestInit = {}): Promise<Response> {
+    const proxiedUrl = CORS_PROXY + encodeURIComponent(url);
+    console.log(`[SEC] Fetching via proxy: ${url}`);
+
+    // Remove User-Agent header (not allowed via proxy)
+    const { headers, ...rest } = options;
+
+    const response = await fetch(proxiedUrl, rest);
+
+    if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+    }
+
+    return response;
+}
 
 // SEC EDGAR API endpoints
 const SEC_ENDPOINTS = {
@@ -51,9 +72,7 @@ export async function lookupCIK(ticker: string): Promise<CompanyInfo> {
 
     try {
         // Use SEC's company tickers JSON file
-        const response = await fetch(SEC_ENDPOINTS.TICKERS, {
-            headers: { 'User-Agent': SEC_USER_AGENT },
-        });
+        const response = await fetchWithCorsProxy(SEC_ENDPOINTS.TICKERS);
 
         if (!response.ok) {
             throw new Error(`SEC API error: ${response.status}`);
@@ -106,9 +125,8 @@ export async function getRecentFilings(
     console.log(`[SEC] Fetching filings for CIK ${companyInfo.cik}...`);
 
     try {
-        const response = await fetch(
-            `${SEC_ENDPOINTS.SUBMISSIONS}/CIK${companyInfo.cik}.json`,
-            { headers: { 'User-Agent': SEC_USER_AGENT } }
+        const response = await fetchWithCorsProxy(
+            `${SEC_ENDPOINTS.SUBMISSIONS}/CIK${companyInfo.cik}.json`
         );
 
         if (!response.ok) {
@@ -180,9 +198,7 @@ export async function fetchFilingDocument(
     onProgress?.(`Downloading ${filing.form} filing from SEC...`);
 
     try {
-        const response = await fetch(url, {
-            headers: { 'User-Agent': SEC_USER_AGENT },
-        });
+        const response = await fetchWithCorsProxy(url);
 
         if (!response.ok) {
             throw new Error(`SEC API error: ${response.status}`);
