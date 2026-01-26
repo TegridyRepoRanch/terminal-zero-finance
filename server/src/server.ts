@@ -14,6 +14,7 @@ import { initializeAnthropicClient } from './services/anthropic.service.js';
 import extractionRoutes from './routes/extraction.routes.js';
 import claudeRoutes from './routes/claude.routes.js';
 import secRoutes from './routes/sec.routes.js';
+import chatRoutes from './routes/chat.routes.js';
 
 // Validate configuration
 try {
@@ -90,6 +91,9 @@ app.use('/api/claude', cacheMiddleware, csrfProtection, claudeRoutes);
 
 // SEC EDGAR proxy (with caching, no CSRF needed for public data)
 app.use('/api/sec', cacheMiddleware, secRoutes);
+
+// DD Chat routes (streaming, no caching)
+app.use('/api/chat', csrfProtection, chatRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

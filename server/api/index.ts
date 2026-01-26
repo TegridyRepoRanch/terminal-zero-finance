@@ -12,6 +12,7 @@ import { cacheMiddleware, getCacheStats, clearCache } from '../src/middleware/ca
 import extractionRoutes from '../src/routes/extraction.routes.js';
 import claudeRoutes from '../src/routes/claude.routes.js';
 import secRoutes from '../src/routes/sec.routes.js';
+import chatRoutes from '../src/routes/chat.routes.js';
 import { initializeGeminiClient } from '../src/services/gemini.service.js';
 import { initializeAnthropicClient } from '../src/services/anthropic.service.js';
 
@@ -79,6 +80,9 @@ app.post('/api/cache/clear', csrfProtection, clearCache);
 app.use('/api/extraction', csrfProtection, extractionRoutes);
 app.use('/api/claude', csrfProtection, claudeRoutes);
 app.use('/api/sec', cacheMiddleware, secRoutes);
+
+// DD Chat routes (streaming, no caching)
+app.use('/api/chat', csrfProtection, chatRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
