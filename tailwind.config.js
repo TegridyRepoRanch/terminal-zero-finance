@@ -4,6 +4,7 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -20,6 +21,9 @@ export default {
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'SF Mono', 'Fira Code', 'Monaco', 'Consolas', 'monospace'],
+      },
+      screens: {
+        'xs': '475px',
       },
     },
   },

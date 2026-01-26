@@ -1,8 +1,21 @@
 // DCF Valuation Engine View
+import { useState } from 'react';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { formatCurrency, formatPercent } from '../lib/financial-logic';
-import { TrendingUp, DollarSign, Target, Zap } from 'lucide-react';
+import { TrendingUp, DollarSign, Target, Zap, BarChart3, Activity, Grid3X3, Wand2, Table, Dice6, Building2, Briefcase, History, Users, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
+import { WaterfallChart, TornadoChart, HeatmapChart, CustomChartBuilder } from './charts';
+import {
+  SensitivityTable,
+  MonteCarloSimulation,
+  ComparableCompanies,
+  PrecedentTransactions,
+  HistoricalTrends,
+  PeerComparison,
+  QuarterlyProjections,
+} from './analysis';
+import { ExportMenu } from './ExportMenu';
+import { cn } from '../lib/utils';
 
 interface StatCardProps {
     label: string;
@@ -37,8 +50,34 @@ function StatCard({ label, value, sublabel, icon, variant = 'default' }: StatCar
     );
 }
 
+// Advanced Charts Tab Types
+type AdvancedChartTab = 'waterfall' | 'tornado' | 'heatmap' | 'custom';
+
+const advancedChartTabs: { id: AdvancedChartTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'waterfall', label: 'Waterfall', icon: <BarChart3 size={14} /> },
+    { id: 'tornado', label: 'Sensitivity', icon: <Activity size={14} /> },
+    { id: 'heatmap', label: 'Heatmap', icon: <Grid3X3 size={14} /> },
+    { id: 'custom', label: 'Custom Builder', icon: <Wand2 size={14} /> },
+];
+
+// Analysis Module Tab Types
+type AnalysisTab = 'sensitivity' | 'monteCarlo' | 'comps' | 'precedents' | 'historical' | 'peers' | 'quarterly';
+
+const analysisTabs: { id: AnalysisTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'sensitivity', label: 'Sensitivity Table', icon: <Table size={14} /> },
+    { id: 'monteCarlo', label: 'Monte Carlo', icon: <Dice6 size={14} /> },
+    { id: 'comps', label: 'Comps', icon: <Building2 size={14} /> },
+    { id: 'precedents', label: 'Precedents', icon: <Briefcase size={14} /> },
+    { id: 'historical', label: 'Historical', icon: <History size={14} /> },
+    { id: 'peers', label: 'Peer Analysis', icon: <Users size={14} /> },
+    { id: 'quarterly', label: 'Quarterly', icon: <Calendar size={14} /> },
+];
+
 export function ValuationEngine() {
     const { valuation, cashFlow, assumptions } = useFinanceStore();
+    const [activeAdvancedTab, setActiveAdvancedTab] = useState<AdvancedChartTab>('waterfall');
+    const [activeAnalysisTab, setActiveAnalysisTab] = useState<AnalysisTab>('sensitivity');
+    const [showAnalysis, setShowAnalysis] = useState(true);
 
     // Prepare chart data for UFCF
     const ufcfChartData = cashFlow.map((cf) => ({
@@ -69,6 +108,17 @@ export function ValuationEngine() {
 
     return (
         <div className="space-y-6">
+            {/* Header with Export */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-lg font-bold text-zinc-100">DCF Valuation</h2>
+                    <p className="text-xs text-zinc-500">
+                        {assumptions.projectionYears}-year projection with {formatPercent(assumptions.wacc)} WACC
+                    </p>
+                </div>
+                <ExportMenu />
+            </div>
+
             {/* Key Metrics */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
@@ -258,6 +308,95 @@ export function ValuationEngine() {
                         <span className="text-cyan-400 text-lg">${valuation.impliedSharePrice.toFixed(2)}</span>
                     </div>
                 </div>
+            </div>
+
+            {/* Advanced Analytics Section */}
+            <div className="bg-zinc-900/30 rounded-lg border border-zinc-800 overflow-hidden">
+                <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/80">
+                    <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider">Advanced Analytics</h2>
+                    <p className="text-xs text-zinc-500 mt-0.5">Interactive visualizations for deeper analysis</p>
+                </div>
+
+                {/* Tab Navigation */}
+                <div className="flex items-center gap-1 px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 overflow-x-auto">
+                    {advancedChartTabs.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveAdvancedTab(tab.id)}
+                            className={cn(
+                                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                                'focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 focus:ring-offset-zinc-900',
+                                activeAdvancedTab === tab.id
+                                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
+                                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                            )}
+                            role="tab"
+                            aria-selected={activeAdvancedTab === tab.id}
+                        >
+                            {tab.icon}
+                            <span className="hidden sm:inline">{tab.label}</span>
+                        </button>
+                    ))}
+                </div>
+
+                {/* Tab Content */}
+                <div className="p-4">
+                    {activeAdvancedTab === 'waterfall' && <WaterfallChart height={300} />}
+                    {activeAdvancedTab === 'tornado' && <TornadoChart height={400} />}
+                    {activeAdvancedTab === 'heatmap' && <HeatmapChart />}
+                    {activeAdvancedTab === 'custom' && <CustomChartBuilder />}
+                </div>
+            </div>
+
+            {/* Analysis Modules Section */}
+            <div className="bg-zinc-900/30 rounded-lg border border-zinc-800 overflow-hidden">
+                <button
+                    onClick={() => setShowAnalysis(!showAnalysis)}
+                    className="w-full px-4 py-3 border-b border-zinc-800 bg-zinc-900/80 flex items-center justify-between hover:bg-zinc-900 transition-colors"
+                >
+                    <div>
+                        <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider">Analysis Modules</h2>
+                        <p className="text-xs text-zinc-500 mt-0.5">Comps, precedents, Monte Carlo, and more</p>
+                    </div>
+                    {showAnalysis ? <ChevronUp size={16} className="text-zinc-500" /> : <ChevronDown size={16} className="text-zinc-500" />}
+                </button>
+
+                {showAnalysis && (
+                    <>
+                        {/* Tab Navigation */}
+                        <div className="flex items-center gap-1 px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 overflow-x-auto">
+                            {analysisTabs.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveAnalysisTab(tab.id)}
+                                    className={cn(
+                                        'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap',
+                                        'focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1 focus:ring-offset-zinc-900',
+                                        activeAnalysisTab === tab.id
+                                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20'
+                                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                                    )}
+                                    role="tab"
+                                    aria-selected={activeAnalysisTab === tab.id}
+                                >
+                                    {tab.icon}
+                                    <span className="hidden sm:inline">{tab.label}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Tab Content */}
+                        <div className="p-4">
+                            {activeAnalysisTab === 'sensitivity' && <SensitivityTable />}
+                            {activeAnalysisTab === 'monteCarlo' && <MonteCarloSimulation />}
+                            {activeAnalysisTab === 'comps' && <ComparableCompanies />}
+                            {activeAnalysisTab === 'precedents' && <PrecedentTransactions />}
+                            {activeAnalysisTab === 'historical' && <HistoricalTrends />}
+                            {activeAnalysisTab === 'peers' && <PeerComparison />}
+                            {activeAnalysisTab === 'quarterly' && <QuarterlyProjections />}
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );

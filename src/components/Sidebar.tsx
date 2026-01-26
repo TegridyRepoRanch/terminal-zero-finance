@@ -1,6 +1,7 @@
 // Sidebar - Assumptions Input Panel
 import { useState } from 'react';
 import { useFinanceStore } from '../store/useFinanceStore';
+import { showToast } from '../lib/toast';
 import { RefreshCw, TrendingUp, Building2, DollarSign, Calculator, Percent, AlertTriangle, Download, X } from 'lucide-react';
 
 interface InputFieldProps {
@@ -18,13 +19,20 @@ interface InputFieldProps {
 function InputField({ label, value, onChange, suffix, prefix, step = 1, min, max, decimals = 2 }: InputFieldProps) {
     // Format value for display - avoids 6.42551178%
     const displayValue = Number(value).toFixed(decimals);
+    const inputId = `input-${label.toLowerCase().replace(/\s+/g, '-')}`;
 
     return (
         <div className="flex items-center justify-between py-2 border-b border-zinc-800/50 group hover:bg-zinc-900/30 px-2 -mx-2 rounded">
-            <span className="text-zinc-400 text-xs uppercase tracking-wider">{label}</span>
+            <label
+                htmlFor={inputId}
+                className="text-zinc-400 text-xs uppercase tracking-wider cursor-pointer"
+            >
+                {label}
+            </label>
             <div className="flex items-center gap-1">
-                {prefix && <span className="text-zinc-500 text-sm">{prefix}</span>}
+                {prefix && <span className="text-zinc-500 text-sm" aria-hidden="true">{prefix}</span>}
                 <input
+                    id={inputId}
                     type="number"
                     // Use key to force re-render if value changes externally (precision fix)
                     key={`${value}-${decimals}`}
@@ -39,11 +47,12 @@ function InputField({ label, value, onChange, suffix, prefix, step = 1, min, max
                     step={step}
                     min={min}
                     max={max}
-                    className="w-24 bg-transparent text-right text-emerald-400 font-mono text-sm 
-                     border-b border-transparent focus:border-emerald-500 focus:outline-none
+                    aria-label={`${label}${prefix ? ` in ${prefix}` : ''}${suffix ? ` (${suffix})` : ''}`}
+                    className="w-24 bg-transparent text-right text-emerald-400 font-mono text-sm
+                     border-b border-transparent focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50
                      group-hover:border-zinc-700 transition-colors"
                 />
-                {suffix && <span className="text-zinc-500 text-sm">{suffix}</span>}
+                {suffix && <span className="text-zinc-500 text-sm" aria-hidden="true">{suffix}</span>}
             </div>
         </div>
     );
@@ -82,28 +91,39 @@ function ResetConfirmModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-modal-title"
+            aria-describedby="reset-modal-description"
+        >
+            <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={onClose}
+                aria-hidden="true"
+            />
             <div className="relative bg-zinc-900 border border-zinc-700 rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300"
+                    className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded"
+                    aria-label="Close dialog"
                 >
                     <X size={18} />
                 </button>
                 <div className="flex items-start gap-4">
-                    <div className="p-2 bg-amber-500/10 rounded-lg">
+                    <div className="p-2 bg-amber-500/10 rounded-lg" aria-hidden="true">
                         <AlertTriangle className="w-6 h-6 text-amber-400" />
                     </div>
                     <div>
-                        <h3 className="text-lg font-semibold text-zinc-100 mb-2">Reset to Defaults?</h3>
-                        <p className="text-sm text-zinc-400 mb-4">
+                        <h3 id="reset-modal-title" className="text-lg font-semibold text-zinc-100 mb-2">Reset to Defaults?</h3>
+                        <p id="reset-modal-description" className="text-sm text-zinc-400 mb-4">
                             This will reset all assumptions to their default values. Any extracted or customized data will be lost.
                         </p>
                         <div className="flex gap-3">
                             <button
                                 onClick={onClose}
-                                className="px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+                                className="px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             >
                                 Cancel
                             </button>
@@ -111,8 +131,9 @@ function ResetConfirmModal({
                                 onClick={() => {
                                     onConfirm();
                                     onClose();
+                                    showToast.success('Assumptions reset to defaults');
                                 }}
-                                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors"
+                                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400"
                             >
                                 Reset
                             </button>
@@ -185,6 +206,7 @@ export function Sidebar() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        showToast.success('Model exported successfully');
     };
 
     // Update market price manually
@@ -227,25 +249,31 @@ export function Sidebar() {
     }
 
     return (
-        <aside className="w-80 bg-zinc-950 border-r border-zinc-800 flex flex-col h-screen overflow-hidden">
+        <aside
+            className="w-64 sm:w-72 md:w-80 bg-zinc-950 border-r border-zinc-800 flex flex-col h-screen overflow-hidden"
+            role="complementary"
+            aria-label="Model assumptions panel"
+        >
             {/* Header */}
-            <div className="p-4 border-b border-zinc-800 bg-zinc-900/50">
+            <div className="p-3 sm:p-4 border-b border-zinc-800 bg-zinc-900/50">
                 <div className="flex items-center justify-between mb-2">
                     <h1 className="text-lg font-bold text-zinc-100 tracking-tight">TERMINAL ZERO</h1>
                     <div className="flex items-center gap-1">
                         <button
                             onClick={handleExport}
-                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-emerald-400 transition-colors"
+                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-emerald-400 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             title="Export model as JSON"
+                            aria-label="Export model as JSON file"
                         >
-                            <Download size={14} />
+                            <Download size={14} aria-hidden="true" />
                         </button>
                         <button
                             onClick={() => setShowResetModal(true)}
-                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-amber-400 transition-colors"
+                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-amber-400 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500"
                             title="Reset to defaults"
+                            aria-label="Reset all assumptions to defaults"
                         >
-                            <RefreshCw size={14} />
+                            <RefreshCw size={14} aria-hidden="true" />
                         </button>
                     </div>
                 </div>

@@ -6,7 +6,7 @@ import { useUploadStore } from './store/useUploadStore';
 import { Sidebar } from './components/Sidebar';
 import { TabNav } from './components/TabNav';
 import { TickerSearch, CompanyHeader } from './components/TickerSearch';
-import { KeyboardShortcutsHelp, ThemeToggle } from './components/ui';
+import { KeyboardShortcutsHelp, ThemeToggle, PageErrorBoundary, SectionErrorBoundary } from './components/ui';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { AlertTriangle, X, Info } from 'lucide-react';
 import type { Assumptions } from './lib/financial-logic';
@@ -383,6 +383,7 @@ export default function App() {
   }
 
   return (
+    <PageErrorBoundary>
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300 dark:bg-zinc-950 dark:text-zinc-300">
       {/* Skip to content link for keyboard accessibility */}
       <a
@@ -424,9 +425,12 @@ export default function App() {
       {showConfigBanner && (
         <ConfigStatusBanner onDismiss={() => setShowConfigBanner(false)} />
       )}
-      <Suspense fallback={<ComponentLoader />}>
-        {renderView()}
-      </Suspense>
+      <SectionErrorBoundary name="main-content">
+        <Suspense fallback={<ComponentLoader />}>
+          {renderView()}
+        </Suspense>
+      </SectionErrorBoundary>
     </div>
+    </PageErrorBoundary>
   );
 }
