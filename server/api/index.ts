@@ -14,6 +14,10 @@ import extractionRoutes from '../src/routes/extraction.routes.js';
 import claudeRoutes from '../src/routes/claude.routes.js';
 import secRoutes from '../src/routes/sec.routes.js';
 
+console.log('[Routes] Extraction routes imported:', !!extractionRoutes);
+console.log('[Routes] Claude routes imported:', !!claudeRoutes);
+console.log('[Routes] SEC routes imported:', !!secRoutes);
+
 // Validate configuration (non-fatal - log warnings only)
 try {
   validateConfig();
@@ -76,8 +80,11 @@ app.post('/api/cache/clear', csrfProtection, clearCache);
 
 // API routes
 app.use('/api/extraction', cacheMiddleware, csrfProtection, extractionRoutes);
+console.log('[Routes] Registered /api/extraction');
 app.use('/api/claude', cacheMiddleware, csrfProtection, claudeRoutes);
+console.log('[Routes] Registered /api/claude');
 app.use('/api/sec', cacheMiddleware, csrfProtection, secRoutes);
+console.log('[Routes] Registered /api/sec');
 
 // Health check
 app.get('/health', (_req, res) => {
