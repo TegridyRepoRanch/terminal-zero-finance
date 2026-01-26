@@ -1,43 +1,60 @@
 // SEC EDGAR Client - Fetch SEC filings by ticker symbol
 // Uses SEC's free public APIs (no authentication required)
 
-// CORS proxy for SEC API calls (SEC blocks browser cross-origin requests)
-// Using corsproxy.io which handles large files better than allorigins
-const CORS_PROXY = 'https://corsproxy.io/?';
+// CORS proxies for SEC API calls (SEC blocks browser cross-origin requests)
+// We try multiple proxies in case one is down or blocking
+const CORS_PROXIES = [
+    // thingproxy handles .gov sites well
+    'https://thingproxy.freeboard.io/fetch/',
+    // workers proxy as fallback
+    'https://api.codetabs.com/v1/proxy?quest=',
+];
 
 /**
- * Fetch with CORS proxy and timeout - wraps URLs to bypass CORS restrictions
+ * Fetch with CORS proxy and timeout - tries multiple proxies
  */
 async function fetchWithCorsProxy(
     url: string,
-    timeoutMs: number = 60000
+    timeoutMs: number = 90000
 ): Promise<Response> {
-    const proxiedUrl = CORS_PROXY + encodeURIComponent(url);
-    console.log(`[SEC] Fetching via proxy: ${url}`);
+    console.log(`[SEC] Fetching: ${url}`);
 
     // Create abort controller for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    try {
-        const response = await fetch(proxiedUrl, {
-            signal: controller.signal,
-        });
+    // Try each proxy in order
+    let lastError: Error | null = null;
 
-        clearTimeout(timeoutId);
+    for (const proxy of CORS_PROXIES) {
+        const proxiedUrl = proxy + encodeURIComponent(url);
+        console.log(`[SEC] Trying proxy: ${proxy.split('/')[2]}`);
 
-        if (!response.ok) {
-            throw new Error(`HTTP error: ${response.status}`);
+        try {
+            const response = await fetch(proxiedUrl, {
+                signal: controller.signal,
+            });
+
+            if (response.ok) {
+                clearTimeout(timeoutId);
+                console.log(`[SEC] Success with proxy: ${proxy.split('/')[2]}`);
+                return response;
+            }
+
+            console.warn(`[SEC] Proxy returned ${response.status}, trying next...`);
+            lastError = new Error(`HTTP ${response.status}`);
+        } catch (error) {
+            if (error instanceof Error && error.name === 'AbortError') {
+                clearTimeout(timeoutId);
+                throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
+            }
+            console.warn(`[SEC] Proxy failed:`, error instanceof Error ? error.message : error);
+            lastError = error instanceof Error ? error : new Error('Unknown error');
         }
-
-        return response;
-    } catch (error) {
-        clearTimeout(timeoutId);
-        if (error instanceof Error && error.name === 'AbortError') {
-            throw new Error(`Request timed out after ${timeoutMs / 1000}s - SEC filing may be too large`);
-        }
-        throw error;
     }
+
+    clearTimeout(timeoutId);
+    throw lastError || new Error('All CORS proxies failed');
 }
 
 // SEC EDGAR API endpoints
