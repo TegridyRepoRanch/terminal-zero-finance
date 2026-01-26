@@ -14,11 +14,13 @@ import extractionRoutes from '../src/routes/extraction.routes.js';
 import claudeRoutes from '../src/routes/claude.routes.js';
 import secRoutes from '../src/routes/sec.routes.js';
 
-// Validate configuration
+// Validate configuration (non-fatal - log warnings only)
 try {
   validateConfig();
+  console.log('[Config] Validation passed');
 } catch (error) {
-  console.error('[Config] Validation failed:', error);
+  console.warn('[Config] Validation failed:', error);
+  console.warn('[Config] Server will start but some features may be unavailable');
 }
 
 // Initialize AI clients

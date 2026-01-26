@@ -37,10 +37,16 @@ export const config = {
 // Validate required config
 export function validateConfig() {
   if (!config.geminiApiKey) {
-    throw new Error('GEMINI_API_KEY environment variable is required');
+    console.warn('[Config] GEMINI_API_KEY not set - extraction features will be unavailable');
+    console.warn('[Config] Set GEMINI_API_KEY environment variable in Vercel project settings');
+  } else {
+    console.log('[Config] GEMINI_API_KEY configured');
   }
+
   // Anthropic is optional - only needed if using Claude features
   if (!config.anthropicApiKey) {
     console.warn('[Config] ANTHROPIC_API_KEY not set - Claude features will be unavailable');
+  } else {
+    console.log('[Config] ANTHROPIC_API_KEY configured');
   }
 }
