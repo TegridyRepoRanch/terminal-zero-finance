@@ -347,16 +347,26 @@ async function fetchLatestFilingViaBackend(
 ): Promise<{ text: string; url: string; metadata: SECFiling }> {
     onProgress?.(`Looking up ${ticker.toUpperCase()} via backend...`);
 
-    const response = await fetch(`${BACKEND_URL}/api/sec/latest-filing`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ticker, formType }),
-    });
+    const backendUrl = `${BACKEND_URL}/api/sec/latest-filing`;
+    console.log(`[SEC] Fetching via backend: ${backendUrl}`);
+
+    let response: Response;
+    try {
+        response = await fetch(backendUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ticker, formType }),
+        });
+    } catch (fetchError) {
+        console.error('[SEC] Network error:', fetchError);
+        throw new Error(`Network error connecting to backend. Check CORS settings or backend URL.`);
+    }
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        console.error('[SEC] Backend error:', response.status, error);
         throw new Error(error.error || `Failed to fetch ${formType}: HTTP ${response.status}`);
     }
 
