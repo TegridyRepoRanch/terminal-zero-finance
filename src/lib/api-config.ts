@@ -139,10 +139,10 @@ export function validateConfig(): ConfigValidation {
   const warnings: string[] = [];
 
   if (mode === 'unconfigured') {
-    errors.push(
-      'No configuration found. You must set either:',
-      '1. VITE_BACKEND_URL (recommended) - See BACKEND_SETUP.md',
-      '2. VITE_GEMINI_API_KEY + VITE_ANTHROPIC_API_KEY (legacy, not secure)'
+    // Don't block app startup - just warn. Users can still use manual entry.
+    warnings.push(
+      'No API configuration found. AI extraction features disabled.',
+      'To enable AI extraction, set VITE_GEMINI_API_KEY or VITE_BACKEND_URL'
     );
   } else if (mode === 'legacy') {
     warnings.push(
