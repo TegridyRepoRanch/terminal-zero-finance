@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Brain, Shield } from 'lucide-react';
 import { useUploadStore } from '../../store/useUploadStore';
 import { extractTextFromPDF, truncateForLLM } from '../../lib/pdf-parser';
-import { extractFinancialsWithGemini, extractFinancialsFromPDF } from '../../lib/gemini-client';
+import { extractFinancialsWithGemini } from '../../lib/gemini-client';
 import { extractFinancialsWithClaude, performFinalReview } from '../../lib/anthropic-client';
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
 import { getConfigMode, getGeminiApiKey, hasGeminiKey, getAnthropicApiKey, hasAnthropicKey } from '../../lib/api-config';
@@ -218,19 +218,15 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           );
           console.log('[Processing] Gemini Flash extraction complete, confidence:', flashResult.confidence.overall);
 
-          // If confidence is too low (<30%), retry with raw PDF
-          if (flashResult.confidence.overall < 0.3 && pdfData.base64Data) {
-            console.warn('[Processing] Low confidence from text extraction, retrying with raw PDF...');
-            setCurrentStepMessage('Low confidence - retrying with raw PDF analysis...');
+          // Log extraction notes for debugging
+          if (flashResult.financials.extractionNotes?.length) {
+            console.log('[Processing] Extraction notes:', flashResult.financials.extractionNotes);
+          }
 
-            flashResult = await extractFinancialsFromPDF(
-              pdfData.base64Data,
-              pdfData.mimeType,
-              geminiApiKey,
-              (message: string) => setCurrentStepMessage(message),
-              true // useFlash = true
-            );
-            console.log('[Processing] Raw PDF extraction complete, confidence:', flashResult.confidence.overall);
+          // Warn if confidence is low, but don't try raw PDF (too slow/timeout prone)
+          if (flashResult.confidence.overall < 0.3) {
+            console.warn('[Processing] Low confidence extraction - PDF may be missing Item 8 financial statements');
+            setCurrentStepMessage('Warning: Low confidence - financial data may be incomplete');
           }
 
           updateStep('flash', 'complete');
