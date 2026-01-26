@@ -1,5 +1,16 @@
 // SEC EDGAR Client - Fetch SEC filings by ticker symbol
-// Uses CORS proxies to bypass same-origin restrictions
+// Uses backend proxy for proper User-Agent headers (SEC requirement)
+// Falls back to CORS proxies if backend unavailable
+
+import { getConfigMode } from './api-config';
+
+// Backend URL
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+// Check if backend mode is configured
+function useBackend(): boolean {
+  return getConfigMode() === 'backend';
+}
 
 // CORS proxies - fallback for when backend is unavailable
 const CORS_PROXIES = [
@@ -327,13 +338,75 @@ function extractTextFromHTML(html: string): string {
 }
 
 /**
+ * Fetch latest filing using backend proxy (preferred method)
+ */
+async function fetchLatestFilingViaBackend(
+    ticker: string,
+    formType: '10-K' | '10-Q',
+    onProgress?: (message: string) => void
+): Promise<{ text: string; url: string; metadata: SECFiling }> {
+    onProgress?.(`Looking up ${ticker.toUpperCase()} via backend...`);
+
+    const backendUrl = `${BACKEND_URL}/api/sec/latest-filing`;
+    console.log(`[SEC] Fetching via backend: ${backendUrl}`);
+
+    const response = await fetch(backendUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ticker, formType }),
+        credentials: 'include',
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[SEC] Backend error:', response.status, errorText);
+        throw new Error(`Backend error: HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (result.status !== 'success') {
+        throw new Error(result.error || 'Backend request failed');
+    }
+
+    const { filing, content, url } = result.data;
+
+    onProgress?.(`Found ${filing.companyName} ${formType} from ${filing.filingDate}`);
+
+    // Extract text from HTML if needed
+    let text = content;
+    if (filing.primaryDocument?.endsWith('.htm')) {
+        text = extractTextFromHTML(content);
+        onProgress?.('Parsed HTML filing document...');
+    }
+
+    return {
+        text,
+        url,
+        metadata: filing,
+    };
+}
+
+/**
  * Convenience function: Fetch latest 10-K for a ticker
  */
 export async function fetchLatest10K(
     ticker: string,
     onProgress?: (message: string) => void
 ): Promise<{ text: string; url: string; metadata: SECFiling }> {
-    // Always use CORS proxy method (backend SEC endpoint not implemented)
+    // Use backend if available (has proper User-Agent headers)
+    if (useBackend()) {
+        try {
+            return await fetchLatestFilingViaBackend(ticker, '10-K', onProgress);
+        } catch (backendError) {
+            console.warn('[SEC] Backend fetch failed, falling back to CORS proxy:', backendError);
+            // Fall through to CORS proxy method
+        }
+    }
+
+    // Fallback to CORS proxy method
     onProgress?.(`Looking up ${ticker.toUpperCase()}...`);
     const filings = await getRecentFilings(ticker, '10-K', 1);
 
@@ -354,7 +427,17 @@ export async function fetchLatest10Q(
     ticker: string,
     onProgress?: (message: string) => void
 ): Promise<{ text: string; url: string; metadata: SECFiling }> {
-    // Always use CORS proxy method (backend SEC endpoint not implemented)
+    // Use backend if available (has proper User-Agent headers)
+    if (useBackend()) {
+        try {
+            return await fetchLatestFilingViaBackend(ticker, '10-Q', onProgress);
+        } catch (backendError) {
+            console.warn('[SEC] Backend fetch failed, falling back to CORS proxy:', backendError);
+            // Fall through to CORS proxy method
+        }
+    }
+
+    // Fallback to CORS proxy method
     onProgress?.(`Looking up ${ticker.toUpperCase()}...`);
     const filings = await getRecentFilings(ticker, '10-Q', 1);
 

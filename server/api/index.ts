@@ -12,6 +12,7 @@ import { initializeGeminiClient } from '../src/services/gemini.service.js';
 import { initializeAnthropicClient } from '../src/services/anthropic.service.js';
 import extractionRoutes from '../src/routes/extraction.routes.js';
 import claudeRoutes from '../src/routes/claude.routes.js';
+import secRoutes from '../src/routes/sec.routes.js';
 
 // Validate configuration
 try {
@@ -74,6 +75,7 @@ app.post('/api/cache/clear', csrfProtection, clearCache);
 // API routes
 app.use('/api/extraction', cacheMiddleware, csrfProtection, extractionRoutes);
 app.use('/api/claude', cacheMiddleware, csrfProtection, claudeRoutes);
+app.use('/api/sec', cacheMiddleware, csrfProtection, secRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
