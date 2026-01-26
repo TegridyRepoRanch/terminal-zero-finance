@@ -109,20 +109,115 @@ export async function extractTextFromPDF(
 }
 
 /**
- * Truncate text to fit within LLM context limits
- * Keeps beginning and end of document (most important parts)
+ * Intelligently truncate text for LLM while preserving financial content.
+ * For 10-K/10-Q filings, prioritizes Item 8 (Financial Statements) content.
  */
-export function truncateForLLM(text: string, maxLength: number = 100000): string {
+export function truncateForLLM(text: string, maxLength: number = 120000): string {
   if (text.length <= maxLength) {
     return text;
   }
 
-  // Keep 80% from the beginning, 20% from the end
-  const beginningLength = Math.floor(maxLength * 0.8);
-  const endLength = maxLength - beginningLength - 50; // 50 chars for separator
+  console.log(`[PDF] Text length ${text.length} exceeds ${maxLength}, applying smart truncation`);
 
-  const beginning = text.slice(0, beginningLength);
-  const ending = text.slice(-endLength);
+  // Try to find financial statement sections (Item 8 in 10-K, Item 1 in 10-Q)
+  const financialSectionPatterns = [
+    // Item 8 - Financial Statements and Supplementary Data
+    /ITEM\s*8[.\s\-:]*FINANCIAL\s*STATEMENTS/i,
+    /PART\s*II[.\s\-\n]*ITEM\s*8/i,
+    /CONSOLIDATED\s+STATEMENTS?\s+OF\s+(OPERATIONS?|INCOME|COMPREHENSIVE\s+INCOME)/i,
+    /CONSOLIDATED\s+BALANCE\s+SHEETS?/i,
+    /CONSOLIDATED\s+STATEMENTS?\s+OF\s+CASH\s+FLOWS?/i,
+    // Key financial headers
+    /NET\s+SALES|TOTAL\s+NET\s+SALES|NET\s+REVENUES?/i,
+    /COST\s+OF\s+(GOODS\s+)?SALES|COST\s+OF\s+PRODUCTS?\s+SOLD/i,
+    /GROSS\s+(PROFIT|MARGIN)/i,
+    /OPERATING\s+(INCOME|EXPENSES?)/i,
+    /TOTAL\s+ASSETS/i,
+    /TOTAL\s+LIABILITIES/i,
+    /STOCKHOLDERS.?\s+EQUITY/i,
+  ];
 
-  return `${beginning}\n\n[... CONTENT TRUNCATED ...]\n\n${ending}`;
+  // Find the best starting position for financial content
+  let financialStart = -1;
+  for (const pattern of financialSectionPatterns) {
+    const match = text.search(pattern);
+    if (match > 0 && (financialStart === -1 || match < financialStart)) {
+      financialStart = match;
+      console.log(`[PDF] Found financial content at position ${match} using pattern: ${pattern.toString().slice(0, 50)}`);
+      break;
+    }
+  }
+
+  // If we found financial content, build context around it
+  if (financialStart > 0) {
+    // Include some context before the financial section
+    const contextBefore = Math.min(financialStart, 10000);
+    const startPos = Math.max(0, financialStart - contextBefore);
+
+    // Calculate how much we can include
+    const availableLength = maxLength - 2000; // Reserve space for intro
+
+    // Build: intro + financial sections
+    const intro = text.slice(0, 2000); // First 2000 chars for company name, metadata
+    const financialContent = text.slice(startPos, startPos + availableLength);
+
+    const result = `${intro}\n\n[... DOCUMENT CONTENT SKIPPED TO FINANCIAL SECTIONS ...]\n\n${financialContent}`;
+    console.log(`[PDF] Smart truncation: intro(2000) + financial content(${financialContent.length})`);
+    return result;
+  }
+
+  // Fallback: If no financial section found, use a more balanced approach
+  // Take beginning (for company info) + middle (where financials often are) + end
+  console.log('[PDF] No financial section markers found, using balanced truncation');
+
+  const introLength = 5000; // Company info
+  const middleStart = Math.floor(text.length * 0.3); // Start of middle section
+  const middleLength = maxLength - introLength - 2000; // Most content from middle
+  const endLength = 2000;
+
+  const intro = text.slice(0, introLength);
+  const middle = text.slice(middleStart, middleStart + middleLength);
+  const end = text.slice(-endLength);
+
+  return `${intro}\n\n[... CONTENT TRUNCATED - SKIPPING TO MIDDLE SECTIONS ...]\n\n${middle}\n\n[... DOCUMENT END ...]\n\n${end}`;
 }
+
+/**
+ * Extract specific financial sections from text
+ * Returns extracted sections or empty string if not found
+ */
+export function extractFinancialSections(text: string): string {
+  const sections: string[] = [];
+
+  // Patterns to find financial tables
+  const tablePatterns = [
+    // Income statement patterns
+    {
+      start: /CONSOLIDATED\s+STATEMENTS?\s+OF\s+(OPERATIONS?|INCOME)/i,
+      end: /CONSOLIDATED\s+(BALANCE\s+SHEETS?|STATEMENTS?\s+OF\s+COMPREHENSIVE)/i,
+    },
+    // Balance sheet patterns  
+    {
+      start: /CONSOLIDATED\s+BALANCE\s+SHEETS?/i,
+      end: /CONSOLIDATED\s+STATEMENTS?\s+OF\s+(CASH\s+FLOWS?|STOCKHOLDERS)/i,
+    },
+    // Cash flow patterns
+    {
+      start: /CONSOLIDATED\s+STATEMENTS?\s+OF\s+CASH\s+FLOWS?/i,
+      end: /NOTES\s+TO\s+(CONSOLIDATED\s+)?FINANCIAL\s+STATEMENTS|ITEM\s*9/i,
+    },
+  ];
+
+  for (const pattern of tablePatterns) {
+    const startMatch = text.search(pattern.start);
+    if (startMatch > 0) {
+      const searchText = text.slice(startMatch);
+      const endMatch = searchText.search(pattern.end);
+      const sectionEnd = endMatch > 0 ? endMatch : Math.min(searchText.length, 30000);
+      sections.push(searchText.slice(0, sectionEnd));
+    }
+  }
+
+  return sections.join('\n\n=== SECTION BREAK ===\n\n');
+}
+
