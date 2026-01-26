@@ -11,11 +11,29 @@ import type {
   DerivedMetrics,
 } from '../lib/extraction-types';
 
+// SEC filing data from SEC EDGAR API
+export interface SECFilingData {
+  text: string;
+  originalLength: number;
+  source: 'sec';
+  metadata: {
+    ticker: string;
+    companyName: string;
+    filingType: '10-K' | '10-Q' | 'unknown';
+    filingDate: string;
+    accessionNumber: string;
+    url: string;
+  };
+}
+
 interface UploadState {
-  // File
+  // File (for PDF upload)
   file: File | null;
   fileName: string | null;
   fileSize: number | null;
+
+  // SEC filing data (for ticker fetch)
+  secFilingData: SECFilingData | null;
 
   // Processing status
   status: ExtractionStatus;
@@ -34,6 +52,7 @@ interface UploadState {
 
   // Actions
   setFile: (file: File) => void;
+  setSecFilingData: (data: SECFilingData) => void;
   clearFile: () => void;
   setStatus: (status: ExtractionStatus, step?: string) => void;
   setProgress: (progress: number) => void;
@@ -53,6 +72,7 @@ const initialState = {
   file: null,
   fileName: null,
   fileSize: null,
+  secFilingData: null,
   status: 'idle' as ExtractionStatus,
   currentStep: '',
   progress: 0,
@@ -72,6 +92,18 @@ export const useUploadStore = create<UploadState>((set) => ({
       file,
       fileName: file.name,
       fileSize: file.size,
+      secFilingData: null, // Clear SEC data when uploading file
+      status: 'idle',
+      error: null,
+    });
+  },
+
+  setSecFilingData: (data: SECFilingData) => {
+    set({
+      file: null, // Clear file when fetching from SEC
+      fileName: data.metadata.companyName + ' ' + data.metadata.filingType,
+      fileSize: data.originalLength,
+      secFilingData: data,
       status: 'idle',
       error: null,
     });
@@ -82,6 +114,7 @@ export const useUploadStore = create<UploadState>((set) => ({
       file: null,
       fileName: null,
       fileSize: null,
+      secFilingData: null,
       status: 'idle',
       progress: 0,
     });

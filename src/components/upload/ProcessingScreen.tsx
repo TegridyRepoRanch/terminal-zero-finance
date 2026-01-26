@@ -36,6 +36,7 @@ const STEPS: ProcessingStep[] = [
 export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingScreenProps) {
   const {
     file,
+    secFilingData,
     setStatus,
     setProgress,
     setExtractedData,
@@ -148,26 +149,43 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           return baseProgress + (stepProgress * stepSize / 100);
         };
 
-        // Step 1: Extract text from PDF
-        console.log('[Processing] Step 1: Extracting text from PDF...');
+        // Step 1: Get text from PDF or SEC filing
+        console.log('[Processing] Step 1: Getting document text...');
         updateStep('parse', 'active');
-        setStatus('parsing', 'Reading PDF...');
-        setCurrentStepMessage('Extracting text from PDF document...');
 
-        let pdfData;
-        try {
-          pdfData = await extractTextFromPDF(file, (progress) => {
-            setProgress(progressForStep(progress.percent));
-            setCurrentStepMessage(`Reading page ${progress.currentPage} of ${progress.totalPages}...`);
-          });
-          console.log('[Processing] PDF text extracted, length:', pdfData.text.length, 'pages:', pdfData.pageCount);
+        let documentText: string;
 
-          if (!pdfData.text || pdfData.text.length < 100) {
-            throw new Error('Could not extract text from PDF. The file may be scanned or corrupted.');
+        // Check if we have SEC filing data (no PDF parsing needed)
+        if (secFilingData) {
+          console.log('[Processing] Using SEC EDGAR text, length:', secFilingData.text.length);
+          documentText = secFilingData.text;
+          setStatus('parsing', `Using ${secFilingData.metadata.ticker} ${secFilingData.metadata.filingType}...`);
+          setCurrentStepMessage(`Loaded ${secFilingData.metadata.companyName} ${secFilingData.metadata.filingType} from SEC EDGAR...`);
+          // Brief pause for UI
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } else if (file) {
+          // Parse PDF file
+          setStatus('parsing', 'Reading PDF...');
+          setCurrentStepMessage('Extracting text from PDF document...');
+
+          try {
+            const pdfData = await extractTextFromPDF(file, (progress) => {
+              setProgress(progressForStep(progress.percent));
+              setCurrentStepMessage(`Reading page ${progress.currentPage} of ${progress.totalPages}...`);
+            });
+            console.log('[Processing] PDF text extracted, length:', pdfData.text.length, 'pages:', pdfData.pageCount);
+
+            if (!pdfData.text || pdfData.text.length < 100) {
+              throw new Error('Could not extract text from PDF. The file may be scanned or corrupted.');
+            }
+
+            documentText = truncateForLLM(pdfData.text, 120000);
+          } catch (parseError) {
+            console.error('[Processing] PDF parse error:', parseError);
+            throw new Error(`PDF parsing failed: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
           }
-        } catch (parseError) {
-          console.error('[Processing] PDF parse error:', parseError);
-          throw new Error(`PDF parsing failed: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+        } else {
+          throw new Error('No file or SEC filing data available for processing');
         }
 
         if (cancelled) return;
@@ -175,6 +193,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         updateStep('parse', 'complete');
         currentStep++;
         setProgress(progressForStep(0));
+
+        console.log('[Processing] Text length for extraction:', documentText.length);
 
         let finalFinancials;
         let finalConfidence;
@@ -195,11 +215,9 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         let proResult: LLMExtractionResponse | null = null;
         let claudeResult: LLMExtractionResponse | null = null;
 
-        // Truncate text for LLM context
-        const truncatedText = truncateForLLM(pdfData.text, 100000);
-        console.log('[Processing] Text length after truncation:', truncatedText.length);
-
-        // Step 2: Gemini Flash extraction (fast first pass)
+        // Use document text (already truncated if from PDF, or from SEC filing)
+        const truncatedText = documentText;
+        console.log('[Processing] Using document text, length:', truncatedText.length);        // Step 2: Gemini Flash extraction (fast first pass)
         console.log('[Processing] Step 2: Gemini Flash extraction...');
         updateStep('flash', 'active');
         setStatus('extracting', 'Gemini 3 Flash (pass 1)...');
@@ -378,16 +396,20 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         currentStep++;
         setProgress(100);
 
-        // Create metadata
+        // Create metadata (handle both SEC and PDF sources)
         const metadata: ExtractionMetadata = {
-          fileName: file.name,
-          fileSize: file.size,
+          fileName: secFilingData
+            ? `${secFilingData.metadata.ticker} ${secFilingData.metadata.filingType}`
+            : (file?.name || 'Unknown'),
+          fileSize: secFilingData
+            ? secFilingData.originalLength
+            : (file?.size || 0),
           filingType: finalFinancials.filingType,
           companyName: finalFinancials.companyName,
           fiscalPeriod: finalFinancials.fiscalPeriod,
           extractedAt: new Date(),
           confidence: finalConfidence.overall,
-          pageCount: pdfData.pageCount || 0,
+          pageCount: 0, // Not available for SEC filings
           processingTimeMs: Date.now() - startTime,
         };
 
