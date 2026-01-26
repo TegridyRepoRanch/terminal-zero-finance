@@ -84,8 +84,26 @@ console.log('[Routes] Registered /api/extraction');
 app.use('/api/claude', cacheMiddleware, csrfProtection, claudeRoutes);
 console.log('[Routes] Registered /api/claude');
 // SEC EDGAR proxy (no CSRF needed for public data)
-app.use('/api/sec', cacheMiddleware, secRoutes);
-console.log('[Routes] Registered /api/sec (no CSRF)');
+console.log('[Routes] About to register SEC routes, secRoutes is:', typeof secRoutes, secRoutes ? 'truthy' : 'falsy');
+if (secRoutes) {
+  app.use('/api/sec', cacheMiddleware, secRoutes);
+  console.log('[Routes] Registered /api/sec (no CSRF)');
+} else {
+  console.error('[Routes] SEC routes failed to import!');
+  // Add fallback direct route for debugging
+  app.get('/api/sec/test', (_req, res) => {
+    res.json({ error: 'SEC routes failed to import', secRoutesType: typeof secRoutes });
+  });
+}
+
+// Direct SEC test endpoint (bypass router)
+app.get('/api/sec-test', (_req, res) => {
+  res.json({
+    message: 'Direct SEC test endpoint',
+    secRoutesImported: !!secRoutes,
+    secRoutesType: typeof secRoutes
+  });
+});
 
 // Health check
 app.get('/health', (_req, res) => {
