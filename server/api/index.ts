@@ -12,8 +12,23 @@ import { cacheMiddleware, getCacheStats, clearCache } from '../src/middleware/ca
 import extractionRoutes from '../src/routes/extraction.routes.js';
 import claudeRoutes from '../src/routes/claude.routes.js';
 import secRoutes from '../src/routes/sec.routes.js';
+import { initializeGeminiClient } from '../src/services/gemini.service.js';
+import { initializeAnthropicClient } from '../src/services/anthropic.service.js';
 
 const app = express();
+
+// Initialize AI clients
+try {
+  initializeGeminiClient();
+} catch (error) {
+  console.warn('[Gemini] Failed to initialize:', error);
+}
+
+try {
+  initializeAnthropicClient();
+} catch (error) {
+  console.warn('[Anthropic] Failed to initialize:', error);
+}
 
 // Validate config (non-fatal)
 try {
