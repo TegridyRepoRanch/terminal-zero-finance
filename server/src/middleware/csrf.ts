@@ -10,11 +10,11 @@ const csrfProtectionUtils = doubleCsrf({
     // For stateless CSRF, use IP address as session identifier
     return req.ip || 'unknown';
   },
-  cookieName: '__Host-tz.x-csrf-token',
+  cookieName: 'tz-csrf-token',
   cookieOptions: {
-    sameSite: 'strict',
+    sameSite: config.nodeEnv === 'production' ? 'none' : 'lax', // 'none' for cross-domain in production
     path: '/',
-    secure: config.nodeEnv === 'production',
+    secure: config.nodeEnv === 'production', // Required for sameSite: 'none'
     httpOnly: true,
   },
   size: 64,
