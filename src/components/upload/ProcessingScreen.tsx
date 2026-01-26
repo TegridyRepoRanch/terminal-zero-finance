@@ -4,9 +4,8 @@
 import { useEffect, useState } from 'react';
 import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Brain, Shield } from 'lucide-react';
 import { useUploadStore } from '../../store/useUploadStore';
-import { extractTextFromPDF } from '../../lib/pdf-parser';
-import { extractFinancialsFromPDF } from '../../lib/gemini-client';
-import { extractFinancialsFromPDFWithBackend } from '../../lib/backend-client';
+import { extractTextFromPDF, truncateForLLM } from '../../lib/pdf-parser';
+import { extractFinancialsWithGemini } from '../../lib/gemini-client';
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
 import { getConfigMode, getGeminiApiKey, hasGeminiKey } from '../../lib/api-config';
 import type { ExtractionMetadata, ExtractionWarning } from '../../lib/extraction-types';
@@ -88,9 +87,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       return;
     }
 
-    // Get API key only for legacy mode
+    // Get API key
     let geminiApiKey: string = '';
-    let useLegacyFallback = false;
 
     if (configMode === 'legacy') {
       console.log('[Processing] Running in LEGACY mode (frontend API keys)');
@@ -149,21 +147,26 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           return baseProgress + (stepProgress * stepSize / 100);
         };
 
-        // Step 1: Prepare PDF for AI
-        console.log('[Processing] Step 1: Preparing PDF...');
+        // Step 1: Extract text from PDF
+        console.log('[Processing] Step 1: Extracting text from PDF...');
         updateStep('parse', 'active');
-        setStatus('parsing', 'Preparing PDF...');
-        setCurrentStepMessage('Preparing document for AI analysis...');
+        setStatus('parsing', 'Reading PDF...');
+        setCurrentStepMessage('Extracting text from PDF document...');
 
         let pdfData;
         try {
           pdfData = await extractTextFromPDF(file, (progress) => {
             setProgress(progressForStep(progress.percent));
+            setCurrentStepMessage(`Reading page ${progress.currentPage} of ${progress.totalPages}...`);
           });
-          console.log('[Processing] PDF ready, base64 length:', pdfData.base64Data?.length);
+          console.log('[Processing] PDF text extracted, length:', pdfData.text.length, 'pages:', pdfData.pageCount);
+
+          if (!pdfData.text || pdfData.text.length < 100) {
+            throw new Error('Could not extract text from PDF. The file may be scanned or corrupted.');
+          }
         } catch (parseError) {
-          console.error('[Processing] PDF prep error:', parseError);
-          throw new Error(`PDF preparation failed: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+          console.error('[Processing] PDF parse error:', parseError);
+          throw new Error(`PDF parsing failed: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
         }
 
         if (cancelled) return;
@@ -176,71 +179,40 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         let finalConfidence;
         let allWarnings: ExtractionWarning[] = [];
 
-        // Step 2: AI Analysis - Backend or Legacy mode
+        // Step 2: AI Analysis - Send extracted text to Gemini
         console.log('[Processing] Step 2: AI Analysis...');
         updateStep('flash', 'active');
-        setStatus('extracting', 'Analyzing document with AI...');
-        setCurrentStepMessage('Reading and analyzing the PDF...');
+        setStatus('extracting', 'Analyzing with Gemini Flash...');
+        setCurrentStepMessage('Sending extracted text to Gemini for analysis...');
+
+        // Truncate text if too long for LLM context
+        const truncatedText = truncateForLLM(pdfData.text, 100000);
+        console.log('[Processing] Text length after truncation:', truncatedText.length);
 
         let extractionResult;
         try {
-          if (!pdfData.base64Data) {
-            throw new Error('PDF data not available');
+          if (!geminiApiKey) {
+            throw new Error('Gemini API key not available. Please add VITE_GEMINI_API_KEY to your environment.');
           }
 
-          // Backend mode: Use secure backend API
-          if (configMode === 'backend') {
-            console.log('[Processing] Using backend API for PDF extraction...');
-            setCurrentStepMessage('Analyzing PDF via secure backend API...');
+          // Use text-based extraction (faster than raw PDF)
+          console.log('[Processing] Using text-based Gemini extraction...');
+          setCurrentStepMessage('Gemini Flash is analyzing the extracted text...');
 
-            try {
-              extractionResult = await extractFinancialsFromPDFWithBackend(
-                pdfData.base64Data,
-                pdfData.mimeType,
-                (message: string) => setCurrentStepMessage(message),
-                true // useFlash for speed
-              );
-            } catch (backendError) {
-              // If backend fails and we have legacy keys, fall back to direct API
-              if (geminiApiKey) {
-                console.warn('[Processing] Backend failed, falling back to legacy mode:', backendError);
-                setCurrentStepMessage('Backend unavailable - using direct Gemini API...');
-                useLegacyFallback = true;
+          extractionResult = await extractFinancialsWithGemini(
+            truncatedText,
+            geminiApiKey,
+            (message: string) => setCurrentStepMessage(message),
+            true // useFlash for speed
+          );
 
-                extractionResult = await extractFinancialsFromPDF(
-                  pdfData.base64Data,
-                  pdfData.mimeType,
-                  geminiApiKey,
-                  (message: string) => setCurrentStepMessage(message),
-                  true // useFlash for speed
-                );
-              } else {
-                // No fallback available, propagate error
-                throw backendError;
-              }
-            }
-          }
-          // Legacy mode: Direct API call from frontend
-          else {
-            console.log('[Processing] Using direct Gemini API (legacy mode)...');
-            setCurrentStepMessage('Gemini is reading and analyzing the PDF directly...');
-
-            extractionResult = await extractFinancialsFromPDF(
-              pdfData.base64Data,
-              pdfData.mimeType,
-              geminiApiKey,
-              (message: string) => setCurrentStepMessage(message),
-              true // useFlash for speed
-            );
-          }
-
-          console.log('[Processing] Extraction complete', useLegacyFallback ? '(via legacy fallback)' : '');
+          console.log('[Processing] Extraction complete');
 
           finalFinancials = extractionResult.financials;
           finalConfidence = extractionResult.confidence;
           allWarnings = extractionResult.warnings || [];
 
-          // Mark remaining steps complete (simplified flow)
+          // Mark remaining steps complete (simplified flow for now)
           updateStep('flash', 'complete');
           updateStep('pro', 'complete');
           updateStep('claude', 'complete');
