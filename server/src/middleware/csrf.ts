@@ -3,61 +3,82 @@ import { doubleCsrf } from 'csrf-csrf';
 import type { Request, Response, NextFunction } from 'express';
 import { config } from '../config.js';
 
-// Initialize CSRF protection (currently disabled - see TODO below)
-// const csrfProtectionUtils = doubleCsrf({
-//   getSecret: () => config.csrfSecret,
-//   getSessionIdentifier: (req) => {
-//     // For stateless CSRF, use IP address as session identifier
-//     return req.ip || 'unknown';
-//   },
-//   cookieName: 'tz-csrf-token',
-//   cookieOptions: {
-//     sameSite: config.nodeEnv === 'production' ? 'none' : 'lax', // 'none' for cross-domain in production
-//     path: '/',
-//     secure: config.nodeEnv === 'production', // Required for sameSite: 'none'
-//     httpOnly: true,
-//   },
-//   size: 64,
-//   ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
-// });
+// Initialize CSRF protection using double-submit cookie pattern
+const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
+  getSecret: () => config.csrfSecret,
+  getSessionIdentifier: (req: Request) => {
+    // Use a combination of IP and user-agent for stateless session identification
+    // This provides reasonable security without requiring server-side sessions
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const userAgent = req.get('user-agent') || 'unknown';
+    return `${ip}:${userAgent.substring(0, 50)}`;
+  },
+  cookieName: 'tz-csrf-token',
+  cookieOptions: {
+    sameSite: config.nodeEnv === 'production' ? 'none' : 'lax',
+    path: '/',
+    secure: config.nodeEnv === 'production',
+    httpOnly: true,
+    maxAge: 60 * 60 * 1000, // 1 hour
+  },
+  size: 64,
+  ignoredMethods: ['GET', 'HEAD', 'OPTIONS'],
+});
 
 /**
  * Generates and returns a CSRF token for the client.
- *
- * TEMPORARILY DISABLED - Returns a dummy token for now.
- * The actual CSRF token generation has TypeScript type issues with csrf-csrf v4.
- * TODO: Fix CSRF implementation or switch to different library.
+ * The token is also set as an httpOnly cookie for the double-submit pattern.
  *
  * @param req - Express request object
  * @param res - Express response object
  */
 export function csrfTokenGenerator(req: Request, res: Response) {
-  console.log('[CSRF] Token endpoint called (CSRF temporarily disabled)');
-  res.json({
-    token: 'csrf-disabled',
-    success: true,
-  });
+  if (!config.csrfEnabled) {
+    console.log('[CSRF] Token endpoint called (CSRF disabled via config)');
+    res.json({
+      token: 'csrf-disabled',
+      success: true,
+    });
+    return;
+  }
+
+  try {
+    const token = generateCsrfToken(req, res);
+    console.log('[CSRF] Token generated successfully');
+    res.json({
+      token,
+      success: true,
+    });
+  } catch (error) {
+    console.error('[CSRF] Token generation failed:', error);
+    res.status(500).json({
+      error: 'Failed to generate CSRF token',
+      status: 'error',
+    });
+  }
 }
 
 /**
- * CSRF protection middleware (TEMPORARILY DISABLED).
+ * CSRF protection middleware using double-submit cookie pattern.
  *
- * CSRF validation is currently disabled due to TypeScript type issues
- * with csrf-csrf v4 library and cross-domain cookie complications.
+ * Validates that:
+ * 1. The CSRF cookie is present
+ * 2. The CSRF header (x-csrf-token) matches the cookie value
  *
- * TODO: Re-enable CSRF protection with proper implementation.
- * Consider alternatives:
- * - JWT tokens instead of cookies
- * - Different CSRF library with better TypeScript support
- * - Custom CSRF implementation
+ * Can be disabled via CSRF_ENABLED=false environment variable.
  *
  * @param req - Express request object
  * @param res - Express response object
  * @param next - Express next function
  */
-export function csrfProtection(_req: Request, _res: Response, next: NextFunction) {
-  console.log('[CSRF] Protection temporarily disabled - allowing request');
-  next();
+export function csrfProtection(req: Request, res: Response, next: NextFunction) {
+  if (!config.csrfEnabled) {
+    console.log('[CSRF] Protection disabled via config - allowing request');
+    next();
+    return;
+  }
+
+  doubleCsrfProtection(req, res, next);
 }
 
 /**
@@ -78,7 +99,7 @@ export function csrfProtection(_req: Request, _res: Response, next: NextFunction
  */
 export function csrfErrorHandler(
   err: Error,
-  req: Request,
+  _req: Request,
   res: Response,
   next: NextFunction
 ) {

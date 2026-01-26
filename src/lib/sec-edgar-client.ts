@@ -4,11 +4,16 @@
 
 import { getConfigMode } from './api-config';
 
-// Backend URL - auto-detect in production
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ||
-    (window.location.hostname.includes('vercel.app')
-        ? 'https://server-amber-phi.vercel.app'
-        : 'http://localhost:3001');
+// Backend URL from environment variable
+// In production, VITE_BACKEND_URL must be set in Vercel project settings
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+// Warn if using default localhost in production
+if (typeof window !== 'undefined' &&
+    window.location.hostname.includes('vercel.app') &&
+    !import.meta.env.VITE_BACKEND_URL) {
+  console.error('[SEC] WARNING: VITE_BACKEND_URL not set in production. Set this in Vercel environment variables.');
+}
 
 // Check if backend mode is configured
 function useBackend(): boolean {
