@@ -10,8 +10,11 @@ import type {
   ValidationResult,
 } from './gemini-client';
 
-// Backend API configuration
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+// Backend API configuration - auto-detect production
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ||
+  (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+    ? 'https://server-amber-phi.vercel.app'
+    : 'http://localhost:3001');
 
 // CSRF token storage
 let csrfToken: string | null = null;

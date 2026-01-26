@@ -9,12 +9,8 @@ import { errorHandler } from '../src/middleware/errorHandler.js';
 import { csrfTokenGenerator, csrfProtection, csrfErrorHandler } from '../src/middleware/csrf.js';
 import { cacheMiddleware, getCacheStats, clearCache } from '../src/middleware/cache.js';
 
-// Skip AI services for now
-// import { initializeGeminiClient } from '../src/services/gemini.service.js';
-// import { initializeAnthropicClient } from '../src/services/anthropic.service.js';
-// import extractionRoutes from '../src/routes/extraction.routes.js';
-// import claudeRoutes from '../src/routes/claude.routes.js';
-
+import extractionRoutes from '../src/routes/extraction.routes.js';
+import claudeRoutes from '../src/routes/claude.routes.js';
 import secRoutes from '../src/routes/sec.routes.js';
 
 const app = express();
@@ -60,7 +56,9 @@ app.get('/api/csrf-token', csrfTokenGenerator);
 app.get('/api/cache/stats', getCacheStats);
 app.post('/api/cache/clear', csrfProtection, clearCache);
 
-// SEC routes only
+// API routes
+app.use('/api/extraction', csrfProtection, extractionRoutes);
+app.use('/api/claude', csrfProtection, claudeRoutes);
 app.use('/api/sec', cacheMiddleware, secRoutes);
 
 // Health check
