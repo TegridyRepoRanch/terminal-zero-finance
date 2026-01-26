@@ -516,8 +516,9 @@ export function calculateBalanceSheet(
         const totalLiabilities = wc.ap + debtBalance;
         const totalEquity = cumulativeRetainedEarnings;
 
-        // Cash plug to balance
-        const cashPlug = totalLiabilities + totalEquity - totalAssets + wc.ar + wc.inventory + ppe;
+        // Cash plug to balance (Assets = Liabilities + Equity)
+        // Cash = (Liabilities + Equity) - (Assets without cash)
+        const cashPlug = totalLiabilities + totalEquity - totalAssets;
 
         return {
             year: i + 1,
