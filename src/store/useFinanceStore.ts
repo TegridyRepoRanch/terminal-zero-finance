@@ -17,6 +17,7 @@ import type {
     ValuationResult,
 } from '../lib/financial-logic';
 import type { ExtractionMetadata } from '../lib/extraction-types';
+import { fetchStockPriceCached } from '../lib/stock-api';
 
 // Data source tracking
 export type DataSource = 'manual' | 'extraction';
@@ -76,6 +77,7 @@ interface FinanceState {
     setActiveTab: (tab: FinanceState['activeTab']) => void;
     resetToDefaults: () => void;
     setAssumptionsFromExtraction: (assumptions: Assumptions, metadata: ExtractionMetadata) => void;
+    refreshStockPrice: (ticker?: string) => Promise<void>;
 }
 
 function recalculate(assumptions: Assumptions) {
@@ -134,8 +136,8 @@ export const useFinanceStore = create<FinanceState>()(
                 const ticker = metadata.companyName.split(' ')[0].toUpperCase().slice(0, 4);
                 const matchingCompany = sampleCompanies.find(
                     (c) => c.ticker === ticker ||
-                           metadata.companyName.toLowerCase().includes(c.name.toLowerCase()) ||
-                           c.name.toLowerCase().includes(metadata.companyName.toLowerCase().split(' ')[0])
+                        metadata.companyName.toLowerCase().includes(c.name.toLowerCase()) ||
+                        c.name.toLowerCase().includes(metadata.companyName.toLowerCase().split(' ')[0])
                 );
                 set({
                     assumptions,
@@ -152,6 +154,34 @@ export const useFinanceStore = create<FinanceState>()(
                         lastUpdated: metadata.extractedAt,
                     },
                 });
+            },
+
+            refreshStockPrice: async (ticker?: string) => {
+                const state = useFinanceStore.getState();
+                const targetTicker = ticker || state.company?.ticker;
+
+                if (!targetTicker) {
+                    console.warn('[Store] No ticker available to refresh');
+                    return;
+                }
+
+                try {
+                    console.log(`[Store] Fetching stock price for ${targetTicker}...`);
+                    const quote = await fetchStockPriceCached(targetTicker);
+
+                    set((state) => ({
+                        company: state.company ? {
+                            ...state.company,
+                            marketPrice: quote.price,
+                            marketCap: quote.marketCap || state.company.marketCap,
+                            lastUpdated: quote.timestamp,
+                        } : null,
+                    }));
+
+                    console.log(`[Store] Updated ${targetTicker} price: $${quote.price.toFixed(2)}`);
+                } catch (error) {
+                    console.error(`[Store] Failed to fetch stock price for ${targetTicker}:`, error);
+                }
             },
         }),
         {

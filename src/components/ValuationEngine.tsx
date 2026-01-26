@@ -6,13 +6,13 @@ import { TrendingUp, DollarSign, Target, Zap, BarChart3, Activity, Grid3X3, Wand
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import { WaterfallChart, TornadoChart, HeatmapChart, CustomChartBuilder } from './charts';
 import {
-  SensitivityTable,
-  MonteCarloSimulation,
-  ComparableCompanies,
-  PrecedentTransactions,
-  HistoricalTrends,
-  PeerComparison,
-  QuarterlyProjections,
+    SensitivityTable,
+    MonteCarloSimulation,
+    ComparableCompanies,
+    PrecedentTransactions,
+    HistoricalTrends,
+    PeerComparison,
+    QuarterlyProjections,
 } from './analysis';
 import { ExportMenu } from './ExportMenu';
 import { cn } from '../lib/utils';
@@ -173,6 +173,7 @@ export function ValuationEngine() {
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
                                     labelStyle={{ color: '#d4d4d8' }}
+                                    itemStyle={{ color: '#fafafa' }}
                                     formatter={(value) => [`$${(value as number).toFixed(1)}M`, 'UFCF']}
                                 />
                                 <Area
@@ -214,6 +215,7 @@ export function ValuationEngine() {
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
                                     labelStyle={{ color: '#d4d4d8' }}
+                                    itemStyle={{ color: '#fafafa' }}
                                     formatter={(value) => [`$${Math.abs(value as number).toFixed(1)}M`, '']}
                                 />
                                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>

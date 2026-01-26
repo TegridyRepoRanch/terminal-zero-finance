@@ -275,7 +275,7 @@ export default function App() {
   const [view, setView] = useState<AppView>('upload');
   const [showConfigBanner, setShowConfigBanner] = useState(true);
   const [configValidation, setConfigValidation] = useState(() => validateConfig());
-  const { setAssumptionsFromExtraction } = useFinanceStore();
+  const { setAssumptionsFromExtraction, refreshStockPrice } = useFinanceStore();
   const { metadata, reset: resetUpload } = useUploadStore();
 
   // Validate configuration on mount
@@ -329,6 +329,8 @@ export default function App() {
   const handleReviewProceed = (assumptions: Assumptions) => {
     if (metadata) {
       setAssumptionsFromExtraction(assumptions, metadata);
+      // Auto-fetch real-time stock price after extraction
+      refreshStockPrice().catch((e) => console.warn('[App] Stock price fetch failed:', e));
     }
     setView('model');
   };
@@ -384,53 +386,53 @@ export default function App() {
 
   return (
     <PageErrorBoundary>
-    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300 dark:bg-zinc-950 dark:text-zinc-300">
-      {/* Skip to content link for keyboard accessibility */}
-      <a
-        href="#main-content"
-        className="skip-link"
-      >
-        Skip to main content
-      </a>
+      <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300 dark:bg-zinc-950 dark:text-zinc-300">
+        {/* Skip to content link for keyboard accessibility */}
+        <a
+          href="#main-content"
+          className="skip-link"
+        >
+          Skip to main content
+        </a>
 
-      {/* Toast Notifications */}
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#18181b',
-            color: '#d4d4d8',
-            border: '1px solid #27272a',
-            borderRadius: '8px',
-          },
-          success: {
-            iconTheme: {
-              primary: '#34d399',
-              secondary: '#18181b',
+        {/* Toast Notifications */}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#18181b',
+              color: '#d4d4d8',
+              border: '1px solid #27272a',
+              borderRadius: '8px',
             },
-          },
-          error: {
-            iconTheme: {
-              primary: '#f43f5e',
-              secondary: '#18181b',
+            success: {
+              iconTheme: {
+                primary: '#34d399',
+                secondary: '#18181b',
+              },
             },
-          },
-        }}
-      />
+            error: {
+              iconTheme: {
+                primary: '#f43f5e',
+                secondary: '#18181b',
+              },
+            },
+          }}
+        />
 
-      {/* Keyboard Shortcuts Help Modal */}
-      <KeyboardShortcutsHelp />
+        {/* Keyboard Shortcuts Help Modal */}
+        <KeyboardShortcutsHelp />
 
-      {showConfigBanner && (
-        <ConfigStatusBanner onDismiss={() => setShowConfigBanner(false)} />
-      )}
-      <SectionErrorBoundary name="main-content">
-        <Suspense fallback={<ComponentLoader />}>
-          {renderView()}
-        </Suspense>
-      </SectionErrorBoundary>
-    </div>
+        {showConfigBanner && (
+          <ConfigStatusBanner onDismiss={() => setShowConfigBanner(false)} />
+        )}
+        <SectionErrorBoundary name="main-content">
+          <Suspense fallback={<ComponentLoader />}>
+            {renderView()}
+          </Suspense>
+        </SectionErrorBoundary>
+      </div>
     </PageErrorBoundary>
   );
 }
