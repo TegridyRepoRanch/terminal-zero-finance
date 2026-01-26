@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Brain, Shield } from 'lucide-react';
 import { useUploadStore } from '../../store/useUploadStore';
 import { extractTextFromPDF, truncateForLLM } from '../../lib/pdf-parser';
-import { extractFinancialsWithGemini } from '../../lib/gemini-client';
+import { extractFinancialsWithGemini, extractFinancialsFromPDF } from '../../lib/gemini-client';
 import { extractFinancialsWithClaude, performFinalReview } from '../../lib/anthropic-client';
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
 import { getConfigMode, getGeminiApiKey, hasGeminiKey, getAnthropicApiKey, hasAnthropicKey } from '../../lib/api-config';
@@ -216,7 +216,23 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             (message: string) => setCurrentStepMessage(message),
             true // useFlash = true
           );
-          console.log('[Processing] Gemini Flash extraction complete');
+          console.log('[Processing] Gemini Flash extraction complete, confidence:', flashResult.confidence.overall);
+
+          // If confidence is too low (<30%), retry with raw PDF
+          if (flashResult.confidence.overall < 0.3 && pdfData.base64Data) {
+            console.warn('[Processing] Low confidence from text extraction, retrying with raw PDF...');
+            setCurrentStepMessage('Low confidence - retrying with raw PDF analysis...');
+
+            flashResult = await extractFinancialsFromPDF(
+              pdfData.base64Data,
+              pdfData.mimeType,
+              geminiApiKey,
+              (message: string) => setCurrentStepMessage(message),
+              true // useFlash = true
+            );
+            console.log('[Processing] Raw PDF extraction complete, confidence:', flashResult.confidence.overall);
+          }
+
           updateStep('flash', 'complete');
         } catch (flashError) {
           console.error('[Processing] Gemini Flash error:', flashError);
