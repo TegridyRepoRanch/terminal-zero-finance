@@ -11,8 +11,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          // Keep React together to avoid circular dependencies
-          'react-vendor': ['react', 'react-dom', 'react/jsx-runtime', 'scheduler'],
           // Chart library
           'recharts': ['recharts'],
           // State management
@@ -28,9 +26,9 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true, // Remove console.logs in production
+        drop_console: false, // Keep console.error and console.warn in production
         drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug'],
+        pure_funcs: ['console.debug'], // Only remove debug logs
       },
     },
     // Increase chunk size warning limit
