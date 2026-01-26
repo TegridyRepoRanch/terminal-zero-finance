@@ -111,6 +111,8 @@ app.get('/health', (_req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: config.nodeEnv,
+    version: '1.0.3', // Version to verify deployment
+    secRoutesLoaded: !!secRoutes,
   });
 });
 
