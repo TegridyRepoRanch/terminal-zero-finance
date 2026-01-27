@@ -39,9 +39,10 @@ const STEPS: ProcessingStep[] = [
 ];
 
 // Confidence threshold to skip AI extraction entirely (XBRL data is sufficient)
-// When XBRL confidence >= 40%, we trust the structured data and skip hallucination-prone AI
-// Lower threshold prevents AI timeout issues on Vercel (55s limit) and avoids AI hallucination
-const XBRL_SKIP_AI_THRESHOLD = 40;
+// When XBRL confidence >= 50%, we trust the structured data and skip hallucination-prone AI
+// This prevents AI timeout issues on Vercel (55s limit) while ensuring reasonable data quality
+// Note: confidence is stored as decimal (0-1), so 0.5 = 50%
+const XBRL_SKIP_AI_THRESHOLD = 0.5;
 
 export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingScreenProps) {
   const {
@@ -297,7 +298,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           );
 
           if (xbrlResult) {
-            console.log(`[Processing] XBRL extraction successful: ${xbrlResult.xbrlFieldsUsed.length} fields, ${xbrlResult.confidence.overall}% confidence`);
+            const confidencePct = Math.round(xbrlResult.confidence.overall * 100);
+            console.log(`[Processing] XBRL extraction successful: ${xbrlResult.xbrlFieldsUsed.length} fields, ${confidencePct}% confidence`);
             xbrlFieldCount = xbrlResult.xbrlFieldsUsed.length;
             extractionSource = 'xbrl';
             allWarnings = [...allWarnings, ...xbrlResult.warnings];
@@ -306,8 +308,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             // Skip AI extraction if XBRL confidence is high enough
             // This prevents AI hallucination and speeds up extraction
             if (xbrlResult.confidence.overall >= XBRL_SKIP_AI_THRESHOLD) {
-              console.log(`[Processing] XBRL confidence ${xbrlResult.confidence.overall}% >= ${XBRL_SKIP_AI_THRESHOLD}%, skipping AI extraction`);
-              setCurrentStepMessage(`High-confidence iXBRL extraction (${xbrlResult.confidence.overall}%) - skipping AI`);
+              console.log(`[Processing] XBRL confidence ${confidencePct}% >= ${XBRL_SKIP_AI_THRESHOLD * 100}%, skipping AI extraction`);
+              setCurrentStepMessage(`High-confidence iXBRL extraction (${confidencePct}%) - skipping AI`);
 
               // Skip all AI steps
               updateStep('flash', 'skipped');
@@ -323,7 +325,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
               // Add note about pure XBRL extraction
               finalFinancials.extractionNotes = [
                 ...(finalFinancials.extractionNotes || []),
-                `Pure iXBRL extraction: ${xbrlFieldCount} fields at ${xbrlResult.confidence.overall}% confidence (AI skipped)`,
+                `Pure iXBRL extraction: ${xbrlFieldCount} fields at ${confidencePct}% confidence (AI skipped)`,
               ];
 
               // Jump to mapping step

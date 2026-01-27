@@ -223,7 +223,7 @@ function buildXBRLConfidence(
     propertyPlantEquipment: hasField('propertyPlantEquipment') ? XBRL_FIELD_CONFIDENCE : 0,
     totalDebt: hasField('totalDebt') ? XBRL_FIELD_CONFIDENCE : 0,
     sharesOutstanding: hasField('sharesOutstandingBasic') ? XBRL_FIELD_CONFIDENCE : 0,
-    overall: Math.round(overallConfidence * 100),
+    overall: overallConfidence, // Keep as decimal 0-1 to match AI extraction format
   };
 }
 
@@ -245,13 +245,13 @@ function buildMergedConfidence(
     return 0;
   };
 
-  // Calculate overall based on weighted average
+  // Calculate overall based on weighted average (normalize to 0-1 scale)
   const totalFields = xbrlFields.length + aiFields.length;
   const xbrlWeight = xbrlFields.length / Math.max(totalFields, 1);
   const aiWeight = aiFields.length / Math.max(totalFields, 1);
-  const overall = Math.round(
-    xbrlWeight * XBRL_FIELD_CONFIDENCE + aiWeight * aiConfidence.overall
-  );
+  // XBRL_FIELD_CONFIDENCE is 95 (percentage), aiConfidence.overall is 0-1 (decimal)
+  // Normalize XBRL to decimal (0.95) for consistent calculation
+  const overall = xbrlWeight * (XBRL_FIELD_CONFIDENCE / 100) + aiWeight * aiConfidence.overall;
 
   return {
     companyName: 90,
