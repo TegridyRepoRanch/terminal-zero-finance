@@ -16,12 +16,22 @@ import {
   Square,
   Edit3,
   X,
+  ExternalLink,
+  AlertTriangle,
+  Database,
+  Sparkles,
+  Zap,
+  RefreshCw,
+  Quote,
+  MapPin,
+  Scale,
 } from 'lucide-react';
 import { useUploadStore } from '../../store/useUploadStore';
 import { ExtractionWarnings } from './ExtractionWarnings';
 import { formatCurrency, formatPercent } from '../../lib/financial-logic';
 import type { Assumptions } from '../../lib/financial-logic';
 import { mapToAssumptions } from '../../lib/extraction-mapper';
+import type { SourceCitation } from '../../lib/extraction-types';
 
 // Confidence level thresholds
 const CONFIDENCE_THRESHOLDS = {
@@ -35,7 +45,10 @@ type ConfidenceFilter = 'all' | 'high' | 'medium' | 'low';
 interface ReviewScreenProps {
   onProceed: (assumptions: Assumptions) => void;
   onBack: () => void;
+  onForceReextract?: () => void;
 }
+
+type FieldSource = 'xbrl' | 'ai' | undefined;
 
 interface EditableFieldProps {
   label: string;
@@ -47,6 +60,8 @@ interface EditableFieldProps {
   isSelected?: boolean;
   onToggleSelect?: () => void;
   showCheckbox?: boolean;
+  fieldSource?: FieldSource;
+  citation?: SourceCitation;
 }
 
 function getConfidenceColor(confidence?: number): string {
@@ -63,6 +78,52 @@ function getConfidenceLabel(confidence?: number): string {
   return 'Low';
 }
 
+// Source Citation Tooltip/Popover
+interface SourceCitationTooltipProps {
+  citation: SourceCitation;
+  isVisible: boolean;
+}
+
+function SourceCitationTooltip({ citation, isVisible }: SourceCitationTooltipProps) {
+  if (!isVisible) return null;
+
+  return (
+    <div className="absolute z-50 bottom-full left-0 mb-2 w-80 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl p-3 text-left">
+      <div className="text-xs font-semibold text-zinc-300 mb-2 flex items-center gap-1">
+        <Quote className="w-3 h-3" />
+        Source Citation
+      </div>
+
+      {/* Source Text */}
+      <div className="mb-2">
+        <p className="text-[10px] text-zinc-500 uppercase mb-1">Extracted From:</p>
+        <p className="text-xs text-zinc-300 bg-zinc-900/50 p-2 rounded border-l-2 border-cyan-500 font-mono">
+          "{citation.sourceText}"
+        </p>
+      </div>
+
+      {/* Location */}
+      {citation.sourceLocation && (
+        <div className="mb-2 flex items-center gap-1 text-xs text-zinc-400">
+          <MapPin className="w-3 h-3" />
+          <span>{citation.sourceLocation}</span>
+        </div>
+      )}
+
+      {/* Scale Note */}
+      {citation.scaleNote && (
+        <div className="flex items-center gap-1 text-xs text-amber-400">
+          <Scale className="w-3 h-3" />
+          <span>{citation.scaleNote}</span>
+        </div>
+      )}
+
+      {/* Arrow pointing down */}
+      <div className="absolute -bottom-2 left-4 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-zinc-700" />
+    </div>
+  );
+}
+
 function EditableField({
   label,
   value,
@@ -73,9 +134,12 @@ function EditableField({
   isSelected,
   onToggleSelect,
   showCheckbox,
+  fieldSource,
+  citation,
 }: EditableFieldProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value.toString());
+  const [showCitation, setShowCitation] = useState(false);
 
   const formatDisplay = (val: number) => {
     switch (format) {
@@ -130,15 +194,47 @@ function EditableField({
             )}
           </button>
         )}
-        <div className="flex-1">
+        <div className="flex-1 flex items-center gap-2">
           <span className="text-sm text-zinc-400">{label}</span>
           {confidence !== undefined && (
             <span
-              className={`ml-2 text-xs ${confidenceColor}`}
+              className={`text-xs ${confidenceColor}`}
               title={`Confidence: ${confidence}%`}
             >
               ({getConfidenceLabel(confidence)})
             </span>
+          )}
+          {fieldSource === 'xbrl' && (
+            <span
+              className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-green-500/10 text-green-400 rounded text-[10px]"
+              title="Extracted from structured iXBRL data"
+            >
+              <Database className="w-2.5 h-2.5" />
+              XBRL
+            </span>
+          )}
+          {fieldSource === 'ai' && (
+            <div className="relative inline-flex items-center">
+              <span
+                className="inline-flex items-center gap-0.5 px-1 py-0.5 bg-blue-500/10 text-blue-400 rounded text-[10px]"
+                title="Extracted by AI"
+              >
+                <Sparkles className="w-2.5 h-2.5" />
+                AI
+              </span>
+              {citation && (
+                <button
+                  onMouseEnter={() => setShowCitation(true)}
+                  onMouseLeave={() => setShowCitation(false)}
+                  onClick={() => setShowCitation(!showCitation)}
+                  className="ml-1 inline-flex items-center gap-0.5 px-1 py-0.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded text-[10px] transition-colors"
+                  title="View source citation"
+                >
+                  <Quote className="w-2.5 h-2.5" />
+                </button>
+              )}
+              {citation && <SourceCitationTooltip citation={citation} isVisible={showCitation} />}
+            </div>
           )}
         </div>
       </div>
@@ -271,8 +367,8 @@ function BulkEditModal({ fields, onApply, onClose }: BulkEditModalProps) {
   );
 }
 
-export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
-  const { extractedData, confidence, warnings, derivedMetrics, metadata } =
+export function ReviewScreen({ onProceed, onBack, onForceReextract }: ReviewScreenProps) {
+  const { extractedData, confidence, warnings, derivedMetrics, metadata, secFilingData } =
     useUploadStore();
 
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -325,6 +421,55 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
       }
       return next;
     });
+  };
+
+  // Map assumption keys to extraction field names for source lookup
+  const assumptionToExtractionField: Partial<Record<keyof Assumptions, string>> = {
+    baseRevenue: 'revenue',
+    cogsPercent: 'costOfRevenue',
+    sgaPercent: 'sgaExpense',
+    taxRate: 'incomeTaxExpense',
+    daysReceivables: 'accountsReceivable',
+    daysInventory: 'inventory',
+    daysPayables: 'accountsPayable',
+    debtBalance: 'totalDebt',
+    sharesOutstanding: 'sharesOutstandingBasic',
+    netDebt: 'totalDebt',
+    capexPercent: 'capitalExpenditures',
+  };
+
+  // Get field source (xbrl or ai) based on metadata
+  const getFieldSource = (assumptionKey: keyof Assumptions): FieldSource => {
+    if (!metadata) return undefined;
+
+    const extractionField = assumptionToExtractionField[assumptionKey];
+    if (!extractionField) return undefined;
+
+    // Check xbrlFieldsUsed array
+    if (metadata.xbrlFieldsUsed?.includes(extractionField)) {
+      return 'xbrl';
+    }
+
+    // Check aiFieldsUsed array
+    if (metadata.aiFieldsUsed?.includes(extractionField)) {
+      return 'ai';
+    }
+
+    // Fallback: if extraction source is pure xbrl or ai, use that
+    if (metadata.extractionSource === 'xbrl') return 'xbrl';
+    if (metadata.extractionSource === 'ai') return 'ai';
+
+    return undefined;
+  };
+
+  // Get source citation for a field (if available from AI extraction)
+  const getFieldCitation = (assumptionKey: keyof Assumptions): SourceCitation | undefined => {
+    if (!metadata?.sourceCitations) return undefined;
+
+    const extractionField = assumptionToExtractionField[assumptionKey];
+    if (!extractionField) return undefined;
+
+    return metadata.sourceCitations[extractionField];
   };
 
   const handleBulkEdit = (value: number) => {
@@ -493,17 +638,99 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                   <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded">
                     {extractedData.filingType}
                   </span>
+                  {/* Extraction Source Badge */}
+                  {metadata.extractionSource === 'xbrl' && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 text-green-400 rounded" title={`${metadata.xbrlFieldCount || 0} fields from iXBRL`}>
+                      <Database className="w-3 h-3" />
+                      iXBRL
+                    </span>
+                  )}
+                  {metadata.extractionSource === 'hybrid' && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-cyan-500/10 text-cyan-400 rounded" title={`${metadata.xbrlFieldCount || 0} iXBRL + ${metadata.aiFieldCount || 0} AI fields`}>
+                      <Zap className="w-3 h-3" />
+                      Hybrid
+                    </span>
+                  )}
+                  {metadata.extractionSource === 'ai' && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded" title="AI extraction only">
+                      <Sparkles className="w-3 h-3" />
+                      AI
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-xs text-zinc-500">Source</p>
-                <p className="text-sm text-zinc-300 flex items-center gap-1">
-                  <FileText className="w-4 h-4" />
-                  {metadata.fileName}
-                </p>
+                {(secFilingData?.metadata?.url || metadata.sourceUrl) ? (
+                  <a
+                    href={secFilingData?.metadata?.url || metadata.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-emerald-400 hover:text-emerald-300 flex items-center gap-1 justify-end transition-colors"
+                    title="View original SEC filing"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Verify on SEC EDGAR
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <p className="text-sm text-zinc-300 flex items-center gap-1">
+                    <FileText className="w-4 h-4" />
+                    {metadata.fileName}
+                  </p>
+                )}
               </div>
             </div>
           </div>
+
+          {/* Low Confidence Warning - only show for AI-based extraction with low confidence */}
+          {confidence?.overall !== undefined && confidence.overall < 30 && metadata.extractionSource !== 'xbrl' && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-400 mb-1">
+                    Low Confidence Extraction ({Math.round(confidence.overall)}%)
+                  </p>
+                  <p className="text-xs text-amber-300/80 mb-2">
+                    The AI had difficulty extracting reliable data from this filing. This often happens with:
+                  </p>
+                  <ul className="text-xs text-amber-300/70 list-disc list-inside mb-3 space-y-1">
+                    <li>Inline XBRL format (financial data in XML tags)</li>
+                    <li>Scanned or image-based PDFs</li>
+                    <li>Complex or non-standard filing structures</li>
+                  </ul>
+                  <p className="text-xs text-amber-300/80">
+                    {(secFilingData?.metadata?.url || metadata?.sourceUrl) ? (
+                      <>
+                        Please <a href={secFilingData?.metadata?.url || metadata?.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-amber-300 underline hover:text-amber-200">verify the source filing</a> and manually check the values below before proceeding.
+                      </>
+                    ) : (
+                      <>Please manually verify the extracted values before proceeding.</>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* XBRL Success Message - show when XBRL extraction worked well */}
+          {metadata.extractionSource === 'xbrl' && metadata.xbrlFieldCount && metadata.xbrlFieldCount > 15 && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Database className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-400 mb-1">
+                    High-Accuracy iXBRL Extraction
+                  </p>
+                  <p className="text-xs text-green-300/80">
+                    {metadata.xbrlFieldCount} fields extracted directly from structured iXBRL data.
+                    This data comes directly from the SEC filing&apos;s machine-readable format with no AI interpretation.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Main Assumptions Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -528,6 +755,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('baseRevenue')}
                       onToggleSelect={() => toggleFieldSelection('baseRevenue')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('baseRevenue')}
+                      citation={getFieldCitation('baseRevenue')}
                     />
                   )}
                   {shouldShowField('revenueGrowthRate') && (
@@ -551,6 +780,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('cogsPercent')}
                       onToggleSelect={() => toggleFieldSelection('cogsPercent')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('cogsPercent')}
+                      citation={getFieldCitation('cogsPercent')}
                     />
                   )}
                   {shouldShowField('sgaPercent') && (
@@ -563,6 +794,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('sgaPercent')}
                       onToggleSelect={() => toggleFieldSelection('sgaPercent')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('sgaPercent')}
+                      citation={getFieldCitation('sgaPercent')}
                     />
                   )}
                   {shouldShowField('taxRate') && (
@@ -575,6 +808,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('taxRate')}
                       onToggleSelect={() => toggleFieldSelection('taxRate')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('taxRate')}
+                      citation={getFieldCitation('taxRate')}
                     />
                   )}
                 </div>
@@ -600,6 +835,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('daysReceivables')}
                       onToggleSelect={() => toggleFieldSelection('daysReceivables')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('daysReceivables')}
+                      citation={getFieldCitation('daysReceivables')}
                     />
                   )}
                   {shouldShowField('daysInventory') && (
@@ -612,6 +849,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('daysInventory')}
                       onToggleSelect={() => toggleFieldSelection('daysInventory')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('daysInventory')}
+                      citation={getFieldCitation('daysInventory')}
                     />
                   )}
                   {shouldShowField('daysPayables') && (
@@ -624,6 +863,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('daysPayables')}
                       onToggleSelect={() => toggleFieldSelection('daysPayables')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('daysPayables')}
+                      citation={getFieldCitation('daysPayables')}
                     />
                   )}
                 </div>
@@ -646,6 +887,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('capexPercent')}
                       onToggleSelect={() => toggleFieldSelection('capexPercent')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('capexPercent')}
+                      citation={getFieldCitation('capexPercent')}
                     />
                   )}
                   {shouldShowField('depreciationYears') && (
@@ -682,6 +925,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                       isSelected={selectedFields.has('debtBalance')}
                       onToggleSelect={() => toggleFieldSelection('debtBalance')}
                       showCheckbox={bulkEditMode}
+                      fieldSource={getFieldSource('debtBalance')}
+                      citation={getFieldCitation('debtBalance')}
                     />
                   )}
                   {shouldShowField('interestRate') && (
@@ -764,6 +1009,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                     isSelected={selectedFields.has('sharesOutstanding')}
                     onToggleSelect={() => toggleFieldSelection('sharesOutstanding')}
                     showCheckbox={bulkEditMode}
+                    fieldSource={getFieldSource('sharesOutstanding')}
+                    citation={getFieldCitation('sharesOutstanding')}
                   />
                 )}
                 {shouldShowField('netDebt') && (
@@ -775,6 +1022,8 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
                     isSelected={selectedFields.has('netDebt')}
                     onToggleSelect={() => toggleFieldSelection('netDebt')}
                     showCheckbox={bulkEditMode}
+                    fieldSource={getFieldSource('netDebt')}
+                    citation={getFieldCitation('netDebt')}
                   />
                 )}
                 {shouldShowField('projectionYears') && (
@@ -802,17 +1051,38 @@ export function ReviewScreen({ onProceed, onBack }: ReviewScreenProps) {
       {/* Footer Actions */}
       <footer className="px-6 py-4 border-t border-zinc-800 bg-zinc-900">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <button
-            onClick={onBack}
-            className="
-              flex items-center gap-2 px-4 py-2
-              text-zinc-400 hover:text-zinc-200
-              transition-colors
-            "
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Upload New File
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onBack}
+              className="
+                flex items-center gap-2 px-4 py-2
+                text-zinc-400 hover:text-zinc-200
+                transition-colors
+              "
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Upload New File
+            </button>
+
+            {/* Force Re-extract Button - only show for SEC filings */}
+            {secFilingData && onForceReextract && (
+              <button
+                onClick={onForceReextract}
+                className="
+                  flex items-center gap-2 px-3 py-2
+                  text-amber-400 hover:text-amber-300
+                  bg-amber-500/10 hover:bg-amber-500/20
+                  border border-amber-500/30
+                  rounded-lg transition-colors
+                  text-sm
+                "
+                title="Clear cache and re-run extraction from scratch"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Force Re-extract
+              </button>
+            )}
+          </div>
 
           <button
             onClick={() => onProceed(assumptions)}

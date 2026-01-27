@@ -47,9 +47,10 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
       // Truncate text for LLM processing
       const truncatedText = truncateForLLM(result.text, 120000);
 
-      // Store the SEC filing data
+      // Store the SEC filing data (including raw HTML for XBRL parsing)
       setSecFilingData({
         text: truncatedText,
+        rawHtml: result.rawHtml, // Preserve raw HTML for XBRL extraction
         originalLength: result.text.length,
         source: 'sec',
         metadata: {

@@ -1,8 +1,8 @@
 // Processing Screen Component - Multi-Model Validated Extraction
-// 4-step pipeline: Gemini Flash -> Gemini Pro -> Claude Opus -> Final Review
+// Pipeline: XBRL Parse -> Gemini Flash -> Gemini Pro -> Claude Opus -> Final Review
 
 import { useEffect, useState } from 'react';
-import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Brain, Shield } from 'lucide-react';
+import { FileText, Check, Loader2, AlertCircle, ArrowLeft, Zap, Sparkles, Brain, Shield, Database } from 'lucide-react';
 import { useUploadStore } from '../../store/useUploadStore';
 import { extractTextFromPDF, truncateForLLM } from '../../lib/pdf-parser';
 import { extractFinancialsWithGemini } from '../../lib/gemini-client';
@@ -11,7 +11,9 @@ import { extractFinancialsWithBackend, extractFinancialsWithClaudeBackend, perfo
 import { calculateDerivedMetrics, mapToAssumptions, validateAssumptions } from '../../lib/extraction-mapper';
 import { getConfigMode, getGeminiApiKey, hasGeminiKey, getAnthropicApiKey, hasAnthropicKey } from '../../lib/api-config';
 import { FINANCIAL_EXTRACTION_PROMPT } from '../../lib/prompts';
-import type { ExtractionMetadata, ExtractionWarning, LLMExtractionResponse } from '../../lib/extraction-types';
+import { tryExtractFromXBRL, mergeXBRLWithAI, type XBRLExtractionResult } from '../../lib/xbrl-extractor';
+import type { ExtractionMetadata, ExtractionWarning, LLMExtractionResponse, ExtractionSource } from '../../lib/extraction-types';
+import { getCachedExtraction, cacheExtraction, deleteCachedExtraction, isSupabaseConfigured } from '../../lib/supabase-client';
 
 interface ProcessingScreenProps {
   onComplete: () => void;
@@ -22,29 +24,36 @@ interface ProcessingScreenProps {
 interface ProcessingStep {
   id: string;
   label: string;
-  status: 'pending' | 'active' | 'complete' | 'error';
-  icon: 'flash' | 'pro' | 'claude' | 'review' | 'parse' | 'map';
+  status: 'pending' | 'active' | 'complete' | 'error' | 'skipped';
+  icon: 'flash' | 'pro' | 'claude' | 'review' | 'parse' | 'map' | 'xbrl';
 }
 
 const STEPS: ProcessingStep[] = [
-  { id: 'parse', label: 'Parsing PDF document', status: 'pending', icon: 'parse' },
-  { id: 'flash', label: 'Extraction pass 1 (Gemini 3 Flash)', status: 'pending', icon: 'flash' },
-  { id: 'pro', label: 'Extraction pass 2 (Gemini 3 Pro)', status: 'pending', icon: 'pro' },
-  { id: 'claude', label: 'Extraction pass 3 (Claude Opus)', status: 'pending', icon: 'claude' },
-  { id: 'review', label: 'Final validation (Claude Opus)', status: 'pending', icon: 'review' },
+  { id: 'parse', label: 'Parsing document', status: 'pending', icon: 'parse' },
+  { id: 'xbrl', label: 'XBRL structured data extraction', status: 'pending', icon: 'xbrl' },
+  { id: 'flash', label: 'AI extraction pass 1 (Gemini Flash)', status: 'pending', icon: 'flash' },
+  { id: 'pro', label: 'AI extraction pass 2 (Gemini Pro)', status: 'pending', icon: 'pro' },
+  { id: 'claude', label: 'AI extraction pass 3 (Claude Opus)', status: 'pending', icon: 'claude' },
+  { id: 'review', label: 'Final validation', status: 'pending', icon: 'review' },
   { id: 'map', label: 'Processing results', status: 'pending', icon: 'map' },
 ];
+
+// Confidence threshold to skip AI extraction entirely (XBRL data is sufficient)
+// When XBRL confidence >= 80%, we trust the structured data and skip hallucination-prone AI
+const XBRL_SKIP_AI_THRESHOLD = 80;
 
 export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingScreenProps) {
   const {
     file,
     secFilingData,
+    forceReextract,
     setStatus,
     setProgress,
     setExtractedData,
     setDerivedMetrics,
     setMetadata,
     setError,
+    setForceReextract,
   } = useUploadStore();
 
   const [steps, setSteps] = useState<ProcessingStep[]>(STEPS);
@@ -198,9 +207,203 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
         console.log('[Processing] Text length for extraction:', documentText.length);
 
+        // Check cache for SEC filings (before doing expensive AI extraction)
+        // Skip cache if forceReextract is true
+        if (secFilingData && isSupabaseConfigured() && !forceReextract) {
+          console.log('[Processing] Checking cache for:', secFilingData.metadata.accessionNumber);
+          setCurrentStepMessage('Checking extraction cache...');
+
+          const cached = await getCachedExtraction(secFilingData.metadata.accessionNumber);
+
+          if (cached) {
+            console.log('[Processing] Cache hit! Using cached extraction');
+            setCurrentStepMessage('Found cached extraction!');
+
+            // Skip all AI steps - mark as complete/skipped
+            updateStep('xbrl', 'skipped');
+            updateStep('flash', 'skipped');
+            updateStep('pro', 'skipped');
+            updateStep('claude', 'skipped');
+            updateStep('review', 'skipped');
+
+            // Use cached data
+            const derivedMetrics = calculateDerivedMetrics(cached.financials);
+
+            setExtractedData(cached.financials, cached.confidence, cached.warnings);
+            setDerivedMetrics(derivedMetrics);
+
+            updateStep('map', 'complete');
+            setProgress(100);
+
+            const metadata: ExtractionMetadata = {
+              fileName: `${cached.ticker} ${cached.filing_type}`,
+              fileSize: secFilingData.originalLength,
+              filingType: cached.financials.filingType,
+              companyName: cached.company_name,
+              fiscalPeriod: cached.financials.fiscalPeriod,
+              extractedAt: new Date(cached.created_at),
+              confidence: cached.confidence.overall,
+              pageCount: 0,
+              processingTimeMs: Date.now() - startTime,
+              sourceUrl: cached.source_url || undefined,
+              extractionSource: cached.extraction_source,
+              xbrlFieldCount: cached.xbrl_field_count,
+              aiFieldCount: cached.ai_field_count,
+            };
+
+            setMetadata(metadata);
+            setStatus('complete', 'Done! (from cache)');
+
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            if (!cancelled) onComplete();
+            return;
+          }
+
+          console.log('[Processing] No cache hit, proceeding with extraction');
+        } else if (forceReextract && secFilingData && isSupabaseConfigured()) {
+          // Force re-extract: delete old cache entry
+          console.log('[Processing] Force re-extract: deleting cached extraction for:', secFilingData.metadata.accessionNumber);
+          setCurrentStepMessage('Clearing cached extraction...');
+          await deleteCachedExtraction(secFilingData.metadata.accessionNumber);
+          // Reset the flag
+          setForceReextract(false);
+        }
+
         let finalFinancials;
         let finalConfidence;
         let allWarnings: ExtractionWarning[] = [];
+        let extractionSource: ExtractionSource = 'ai';
+        let xbrlResult: XBRLExtractionResult | null = null;
+        let xbrlFieldCount = 0;
+        let aiFieldCount = 0;
+        let xbrlFieldsUsed: string[] = [];
+        let aiFieldsUsed: string[] = [];
+
+        // Step 1.5: Try XBRL extraction (only for SEC filings with raw HTML)
+        console.log('[Processing] Step 1.5: XBRL extraction...');
+        updateStep('xbrl', 'active');
+        setCurrentStepMessage('Checking for iXBRL structured data...');
+
+        if (secFilingData?.rawHtml) {
+          const filingType = secFilingData.metadata.filingType === '10-K' || secFilingData.metadata.filingType === '10-Q'
+            ? secFilingData.metadata.filingType
+            : '10-K';
+
+          xbrlResult = tryExtractFromXBRL(
+            secFilingData.rawHtml,
+            filingType,
+            (msg) => setCurrentStepMessage(msg)
+          );
+
+          if (xbrlResult) {
+            console.log(`[Processing] XBRL extraction successful: ${xbrlResult.xbrlFieldsUsed.length} fields, ${xbrlResult.confidence.overall}% confidence`);
+            xbrlFieldCount = xbrlResult.xbrlFieldsUsed.length;
+            extractionSource = 'xbrl';
+            allWarnings = [...allWarnings, ...xbrlResult.warnings];
+            updateStep('xbrl', 'complete');
+
+            // Skip AI extraction if XBRL confidence is high enough
+            // This prevents AI hallucination and speeds up extraction
+            if (xbrlResult.confidence.overall >= XBRL_SKIP_AI_THRESHOLD) {
+              console.log(`[Processing] XBRL confidence ${xbrlResult.confidence.overall}% >= ${XBRL_SKIP_AI_THRESHOLD}%, skipping AI extraction`);
+              setCurrentStepMessage(`High-confidence iXBRL extraction (${xbrlResult.confidence.overall}%) - skipping AI`);
+
+              // Skip all AI steps
+              updateStep('flash', 'skipped');
+              updateStep('pro', 'skipped');
+              updateStep('claude', 'skipped');
+              updateStep('review', 'skipped');
+
+              // Use XBRL result directly
+              finalFinancials = xbrlResult.financials;
+              finalConfidence = xbrlResult.confidence;
+              aiFieldCount = 0;
+
+              // Add note about pure XBRL extraction
+              finalFinancials.extractionNotes = [
+                ...(finalFinancials.extractionNotes || []),
+                `Pure iXBRL extraction: ${xbrlFieldCount} fields at ${xbrlResult.confidence.overall}% confidence (AI skipped)`,
+              ];
+
+              // Jump to mapping step
+              updateStep('map', 'active');
+              setStatus('mapping', 'Processing results...');
+              setCurrentStepMessage('Calculating derived metrics...');
+
+              const derivedMetrics = calculateDerivedMetrics(finalFinancials);
+              const assumptions = mapToAssumptions(finalFinancials, derivedMetrics);
+              const validationWarnings = validateAssumptions(assumptions, finalFinancials);
+              allWarnings = [...allWarnings, ...validationWarnings];
+
+              setExtractedData(finalFinancials, finalConfidence, allWarnings);
+              setDerivedMetrics(derivedMetrics);
+
+              updateStep('map', 'complete');
+              setProgress(100);
+
+              // Create metadata
+              const metadata: ExtractionMetadata = {
+                fileName: secFilingData
+                  ? `${secFilingData.metadata.ticker} ${secFilingData.metadata.filingType}`
+                  : (file?.name || 'Unknown'),
+                fileSize: secFilingData
+                  ? secFilingData.originalLength
+                  : (file?.size || 0),
+                filingType: finalFinancials.filingType,
+                companyName: finalFinancials.companyName,
+                fiscalPeriod: finalFinancials.fiscalPeriod,
+                extractedAt: new Date(),
+                confidence: finalConfidence.overall,
+                pageCount: 0,
+                processingTimeMs: Date.now() - startTime,
+                sourceUrl: secFilingData?.metadata?.url,
+                extractionSource: 'xbrl',
+                xbrlFieldCount,
+                aiFieldCount: 0,
+                xbrlFieldsUsed: xbrlResult.xbrlFieldsUsed,
+                aiFieldsUsed: [],
+              };
+
+              setMetadata(metadata);
+              setStatus('complete', 'Done! (iXBRL only)');
+
+              // Save to cache
+              if (secFilingData && isSupabaseConfigured()) {
+                console.log('[Processing] Saving XBRL-only extraction to cache...');
+                cacheExtraction({
+                  ticker: secFilingData.metadata.ticker,
+                  filing_type: filingType,
+                  accession_number: secFilingData.metadata.accessionNumber,
+                  filing_date: secFilingData.metadata.filingDate,
+                  company_name: finalFinancials.companyName,
+                  financials: finalFinancials,
+                  confidence: finalConfidence,
+                  warnings: allWarnings,
+                  extraction_source: 'xbrl',
+                  xbrl_field_count: xbrlFieldCount,
+                  ai_field_count: 0,
+                  source_url: secFilingData.metadata.url || null,
+                });
+              }
+
+              await new Promise((resolve) => setTimeout(resolve, 500));
+              if (!cancelled) onComplete();
+              return;
+            }
+          } else {
+            console.log('[Processing] No usable XBRL data found, proceeding with AI extraction');
+            setCurrentStepMessage('No iXBRL data found, using AI extraction...');
+            updateStep('xbrl', 'complete');
+          }
+        } else {
+          console.log('[Processing] No raw HTML available for XBRL parsing (PDF upload)');
+          setCurrentStepMessage('Skipping iXBRL (PDF upload)...');
+          updateStep('xbrl', 'skipped');
+        }
+
+        if (cancelled) return;
+        currentStep++;
+        setProgress(progressForStep(0));
 
         // Get Anthropic API key if available
         let anthropicApiKey: string = '';
@@ -424,9 +627,30 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           finalResult = flashResult!;
         }
 
-        finalFinancials = finalResult.financials;
-        finalConfidence = finalResult.confidence;
-        allWarnings = [...allWarnings, ...(finalResult.warnings || [])];
+        // If we have XBRL data, merge it with AI result (XBRL takes priority)
+        if (xbrlResult && xbrlResult.xbrlFieldsUsed.length > 0) {
+          console.log('[Processing] Merging XBRL data with AI extraction...');
+          const mergedResult = mergeXBRLWithAI(xbrlResult, finalResult, (msg) => setCurrentStepMessage(msg));
+          finalFinancials = mergedResult.financials;
+          finalConfidence = mergedResult.confidence;
+          extractionSource = mergedResult.source;
+          xbrlFieldCount = mergedResult.xbrlFieldsUsed.length;
+          aiFieldCount = mergedResult.aiFieldsUsed.length;
+          xbrlFieldsUsed = mergedResult.xbrlFieldsUsed;
+          aiFieldsUsed = mergedResult.aiFieldsUsed;
+          allWarnings = [...allWarnings, ...mergedResult.warnings];
+          console.log(`[Processing] Final extraction: ${xbrlFieldCount} XBRL fields, ${aiFieldCount} AI fields`);
+        } else {
+          finalFinancials = finalResult.financials;
+          finalConfidence = finalResult.confidence;
+          extractionSource = 'ai';
+          const financialsRecord = finalResult.financials as unknown as Record<string, unknown>;
+          aiFieldsUsed = Object.keys(finalResult.financials).filter(k =>
+            typeof financialsRecord[k] === 'number'
+          );
+          aiFieldCount = aiFieldsUsed.length;
+          allWarnings = [...allWarnings, ...(finalResult.warnings || [])];
+        }
 
         if (cancelled) return;
 
@@ -465,10 +689,45 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
           confidence: finalConfidence.overall,
           pageCount: 0, // Not available for SEC filings
           processingTimeMs: Date.now() - startTime,
+          sourceUrl: secFilingData?.metadata?.url, // SEC EDGAR URL for verification
+          extractionSource, // Where data came from (xbrl, ai, hybrid)
+          xbrlFieldCount,
+          aiFieldCount,
+          xbrlFieldsUsed,
+          aiFieldsUsed,
         };
 
         setMetadata(metadata);
         setStatus('complete', 'Done!');
+
+        // Save to cache for SEC filings
+        if (secFilingData && isSupabaseConfigured()) {
+          console.log('[Processing] Saving extraction to cache...');
+          const filingType = secFilingData.metadata.filingType === '10-K' || secFilingData.metadata.filingType === '10-Q'
+            ? secFilingData.metadata.filingType
+            : '10-K';
+
+          cacheExtraction({
+            ticker: secFilingData.metadata.ticker,
+            filing_type: filingType,
+            accession_number: secFilingData.metadata.accessionNumber,
+            filing_date: secFilingData.metadata.filingDate,
+            company_name: finalFinancials.companyName,
+            financials: finalFinancials,
+            confidence: finalConfidence,
+            warnings: allWarnings,
+            extraction_source: extractionSource,
+            xbrl_field_count: xbrlFieldCount,
+            ai_field_count: aiFieldCount,
+            source_url: secFilingData.metadata.url || null,
+          }).then(success => {
+            if (success) {
+              console.log('[Processing] Extraction cached successfully');
+            } else {
+              console.warn('[Processing] Failed to cache extraction');
+            }
+          });
+        }
 
         // Small delay before transitioning
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -507,14 +766,15 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
   const getStepIcon = (step: ProcessingStep) => {
     const { status, icon } = step;
 
-    const iconColor = {
+    const iconColor: Record<ProcessingStep['icon'], string> = {
       flash: 'text-cyan-400',
       pro: 'text-blue-400',
       claude: 'text-orange-400',
       review: 'text-purple-400',
       parse: 'text-zinc-400',
       map: 'text-emerald-400',
-    }[icon];
+      xbrl: 'text-green-400',
+    };
 
     if (status === 'complete') {
       return <Check className="w-5 h-5 text-emerald-400" />;
@@ -522,25 +782,37 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
     if (status === 'error') {
       return <AlertCircle className="w-5 h-5 text-red-400" />;
     }
+    if (status === 'skipped') {
+      return <Check className="w-5 h-5 text-zinc-500" />;
+    }
     if (status === 'active') {
-      return <Loader2 className={`w-5 h-5 animate-spin ${iconColor}`} />;
+      return <Loader2 className={`w-5 h-5 animate-spin ${iconColor[icon]}`} />;
     }
 
     // Pending state - show the icon for the step
-    const IconComponent = {
+    const IconComponent: Record<ProcessingStep['icon'], typeof Zap> = {
       flash: Zap,
       pro: Sparkles,
       claude: Brain,
       review: Shield,
       parse: FileText,
       map: Check,
-    }[icon];
+      xbrl: Database,
+    };
 
-    return <IconComponent className="w-5 h-5 text-zinc-600" />;
+    const Icon = IconComponent[icon];
+    return <Icon className="w-5 h-5 text-zinc-600" />;
   };
 
   const getModelBadge = (icon: ProcessingStep['icon']) => {
     switch (icon) {
+      case 'xbrl':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded text-xs">
+            <Database className="w-3 h-3" />
+            iXBRL
+          </span>
+        );
       case 'flash':
         return (
           <span className="flex items-center gap-1 px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded text-xs">

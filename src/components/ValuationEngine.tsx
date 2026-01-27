@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { formatCurrency, formatPercent } from '../lib/financial-logic';
-import { TrendingUp, DollarSign, Target, Zap, BarChart3, Activity, Grid3X3, Wand2, Table, Dice6, Building2, Briefcase, History, Users, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { TrendingUp, DollarSign, Target, Zap, BarChart3, Activity, Grid3X3, Wand2, Table, Dice6, Building2, Briefcase, History, Users, Calendar, ChevronDown, ChevronUp, FileText, Calculator } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import { WaterfallChart, TornadoChart, HeatmapChart, CustomChartBuilder } from './charts';
 import {
@@ -13,6 +13,10 @@ import {
     HistoricalTrends,
     PeerComparison,
     QuarterlyProjections,
+    InvestmentMetrics,
+    InvestmentThesis,
+    BreakEvenCalculator,
+    PriceTargetCalculator,
 } from './analysis';
 import { ExportMenu } from './ExportMenu';
 import { FinancialStatementsView } from './FinancialStatementsView';
@@ -63,7 +67,7 @@ const advancedChartTabs: { id: AdvancedChartTab; label: string; icon: React.Reac
 ];
 
 // Analysis Module Tab Types
-type AnalysisTab = 'sensitivity' | 'monteCarlo' | 'comps' | 'precedents' | 'historical' | 'peers' | 'quarterly';
+type AnalysisTab = 'sensitivity' | 'monteCarlo' | 'comps' | 'precedents' | 'historical' | 'peers' | 'quarterly' | 'thesis' | 'breakeven' | 'priceTarget';
 
 const analysisTabs: { id: AnalysisTab; label: string; icon: React.ReactNode }[] = [
     { id: 'sensitivity', label: 'Sensitivity Table', icon: <Table size={14} /> },
@@ -73,6 +77,9 @@ const analysisTabs: { id: AnalysisTab; label: string; icon: React.ReactNode }[] 
     { id: 'historical', label: 'Historical', icon: <History size={14} /> },
     { id: 'peers', label: 'Peer Analysis', icon: <Users size={14} /> },
     { id: 'quarterly', label: 'Quarterly', icon: <Calendar size={14} /> },
+    { id: 'thesis', label: 'Thesis', icon: <FileText size={14} /> },
+    { id: 'breakeven', label: 'Break-Even', icon: <Calculator size={14} /> },
+    { id: 'priceTarget', label: 'Price Target', icon: <Target size={14} /> },
 ];
 
 export function ValuationEngine() {
@@ -156,6 +163,9 @@ export function ValuationEngine() {
                     variant="default"
                 />
             </div>
+
+            {/* Investment Metrics - Margin of Safety, Reverse DCF, Risk, Quality */}
+            <InvestmentMetrics />
 
             {/* Charts Row */}
             <div className="grid lg:grid-cols-2 gap-6">
@@ -402,6 +412,9 @@ export function ValuationEngine() {
                             {activeAnalysisTab === 'historical' && <HistoricalTrends />}
                             {activeAnalysisTab === 'peers' && <PeerComparison />}
                             {activeAnalysisTab === 'quarterly' && <QuarterlyProjections />}
+                            {activeAnalysisTab === 'thesis' && <InvestmentThesis />}
+                            {activeAnalysisTab === 'breakeven' && <BreakEvenCalculator />}
+                            {activeAnalysisTab === 'priceTarget' && <PriceTargetCalculator />}
                         </div>
                     </>
                 )}

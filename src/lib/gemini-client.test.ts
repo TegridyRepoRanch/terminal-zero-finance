@@ -43,6 +43,9 @@ const mockFinancialResponse: LLMExtractionResponse = {
     sharesOutstandingBasic: 15_552_752_000,
     sharesOutstandingDiluted: 15_744_231_000,
     priorYearRevenue: 394_328_000_000,
+    operatingCashFlow: 110_543_000_000,
+    capitalExpenditures: 10_959_000_000,
+    freeCashFlow: 99_584_000_000,
     extractionNotes: ['Data extracted from consolidated financial statements'],
   },
   confidence: {

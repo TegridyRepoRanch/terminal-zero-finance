@@ -10,7 +10,28 @@
 
 export const FINANCIAL_EXTRACTION_PROMPT = `You are a financial analyst AI. Extract key financial data from the following SEC 10-K or 10-Q filing.
 
+CRITICAL: For every value you extract, you MUST provide the exact source text from the filing. This allows verification of your extraction accuracy.
+
 Return a JSON object with the following structure. Use numbers only (no currency symbols or commas). Use null for any values you cannot find. All monetary values should be in dollars (not thousands or millions - convert if needed).
+
+IMPORTANT SCALE INSTRUCTIONS:
+- Look for statements like "in thousands", "in millions", "in billions" near financial tables
+- If amounts are "in thousands", multiply by 1,000
+- If amounts are "in millions", multiply by 1,000,000
+- If amounts are "in billions", multiply by 1,000,000,000
+- Shares are often in millions too - check the scale
+- ALWAYS convert to full dollar amounts (e.g., "$1,234 thousands" = 1234000)
+
+UNUSUAL ITEMS DETECTION:
+Identify any one-time or non-recurring items that may distort normalized earnings:
+- Restructuring charges (layoffs, facility closures)
+- Impairment charges (goodwill, asset write-downs)
+- Legal settlements or reserves
+- Acquisition-related costs
+- Gains/losses from asset sales
+- One-time tax benefits or charges
+- Any item described as "non-recurring", "unusual", or "one-time"
+These items should be listed in the unusualItems array to help normalize the financial data.
 
 {
   "financials": {
@@ -48,6 +69,16 @@ Return a JSON object with the following structure. Use numbers only (no currency
     "sharesOutstandingBasic": number,
     "sharesOutstandingDiluted": number,
     "priorYearRevenue": number or null,
+    "capitalExpenditures": number or null,
+    "unusualItems": [
+      {
+        "description": "Brief description of the unusual item",
+        "amount": number (positive value, in dollars),
+        "category": "restructuring" | "impairment" | "legal" | "acquisition" | "gain_loss_sale" | "tax_benefit" | "other",
+        "impact": "positive" | "negative" (impact on net income),
+        "sourceLocation": "where found in filing"
+      }
+    ],
     "extractionNotes": []
   },
   "confidence": {
@@ -66,8 +97,37 @@ Return a JSON object with the following structure. Use numbers only (no currency
     "sharesOutstanding": 0.0-1.0,
     "overall": 0.0-1.0
   },
-  "warnings": []
+  "warnings": [],
+  "sourceCitations": {
+    "revenue": {
+      "fieldName": "revenue",
+      "extractedValue": number,
+      "sourceText": "exact text from filing showing this value (e.g., 'Net revenues $ 383,285')",
+      "sourceLocation": "location in filing (e.g., 'Consolidated Statements of Operations')",
+      "confidence": 0.0-1.0,
+      "scaleNote": "scale applied (e.g., 'in thousands - multiplied by 1000')"
+    },
+    "netIncome": { ... same structure ... },
+    "totalAssets": { ... same structure ... },
+    "totalDebt": { ... same structure ... },
+    "sharesOutstandingBasic": { ... same structure ... }
+  }
 }
+
+REQUIRED SOURCE CITATIONS: You MUST provide sourceCitations for at least these key fields:
+- revenue
+- costOfRevenue
+- netIncome
+- totalAssets
+- totalLiabilities
+- totalEquity
+- totalDebt
+- sharesOutstandingBasic
+
+For each citation, include:
+1. The EXACT text snippet from the filing (copy verbatim, including numbers and formatting)
+2. Where in the filing you found it (which statement/table/section)
+3. Any scale conversion you applied
 
 Filing text:
 `;

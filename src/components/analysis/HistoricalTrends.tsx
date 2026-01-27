@@ -16,11 +16,29 @@ import {
 } from 'recharts';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { cn } from '../../lib/utils';
-import { History, TrendingUp, DollarSign, Percent } from 'lucide-react';
+import { History, TrendingUp, DollarSign, Percent, Database, Sparkles, AlertCircle } from 'lucide-react';
 
-// Generate sample historical data (in real app, this would come from an API)
-function generateHistoricalData(baseRevenue: number, years: number = 5): HistoricalDataPoint[] {
-  const data: HistoricalDataPoint[] = [];
+// Chart data point format
+interface ChartDataPoint {
+  year: string;
+  revenue: number;
+  revenueGrowth: number;
+  grossProfit: number;
+  grossMargin: number;
+  operatingIncome: number;
+  operatingMargin: number;
+  netIncome: number;
+  netMargin: number;
+  eps: number;
+  fcf: number;
+  capex: number;
+  rnd: number;
+  isReal?: boolean; // Flag for real vs simulated data
+}
+
+// Generate sample historical data (fallback when real data not available)
+function generateHistoricalData(baseRevenue: number, years: number = 5): ChartDataPoint[] {
+  const data: ChartDataPoint[] = [];
   const currentYear = new Date().getFullYear();
 
   // Work backwards from base revenue with some randomness
@@ -53,26 +71,33 @@ function generateHistoricalData(baseRevenue: number, years: number = 5): Histori
       fcf: rev * (netMargin - 0.03),
       capex: rev * 0.08,
       rnd: rev * 0.06,
+      isReal: false,
     });
   });
 
   return data;
 }
 
-interface HistoricalDataPoint {
-  year: string;
-  revenue: number;
-  revenueGrowth: number;
-  grossProfit: number;
-  grossMargin: number;
-  operatingIncome: number;
-  operatingMargin: number;
-  netIncome: number;
-  netMargin: number;
-  eps: number;
-  fcf: number;
-  capex: number;
-  rnd: number;
+// Convert real historical data to chart format
+function convertRealDataToChartFormat(
+  historicalData: NonNullable<ReturnType<typeof useFinanceStore.getState>['historicalData']>
+): ChartDataPoint[] {
+  return historicalData.data.map((dp) => ({
+    year: dp.fiscalYear.toString(),
+    revenue: dp.revenue,
+    revenueGrowth: dp.revenueGrowth ?? 0,
+    grossProfit: dp.grossProfit,
+    grossMargin: dp.grossMargin,
+    operatingIncome: dp.operatingIncome,
+    operatingMargin: dp.operatingMargin,
+    netIncome: dp.netIncome,
+    netMargin: dp.netMargin,
+    eps: dp.eps,
+    fcf: dp.netIncome - Math.abs(dp.capitalExpenditures || 0), // Approximate FCF
+    capex: Math.abs(dp.capitalExpenditures || 0),
+    rnd: 0, // R&D not separately tracked in historical extraction yet
+    isReal: true,
+  }));
 }
 
 type MetricCategory = 'revenue' | 'profitability' | 'margins' | 'cashflow';
@@ -82,12 +107,21 @@ interface HistoricalTrendsProps {
 }
 
 export function HistoricalTrends({ className }: HistoricalTrendsProps) {
-  const { assumptions, company } = useFinanceStore();
+  const { assumptions, company, historicalData: realHistoricalData, historicalStats, isLoadingHistorical } = useFinanceStore();
   const [activeCategory, setActiveCategory] = useState<MetricCategory>('revenue');
 
-  const historicalData = useMemo(() => {
+  // Use real data if available, otherwise generate simulated data
+  const hasRealData = realHistoricalData && realHistoricalData.data.length > 0;
+
+  const chartData = useMemo(() => {
+    if (hasRealData && realHistoricalData) {
+      return convertRealDataToChartFormat(realHistoricalData);
+    }
     return generateHistoricalData(assumptions.baseRevenue);
-  }, [assumptions.baseRevenue]);
+  }, [assumptions.baseRevenue, hasRealData, realHistoricalData]);
+
+  // Backward compatibility alias
+  const historicalData = chartData;
 
   const categories: { id: MetricCategory; label: string; icon: React.ReactNode }[] = [
     { id: 'revenue', label: 'Revenue', icon: <TrendingUp size={14} /> },
@@ -281,22 +315,75 @@ export function HistoricalTrends({ className }: HistoricalTrendsProps) {
     };
   }, [historicalData, cagr]);
 
+  // Get actual CAGR from stats if available
+  const displayCagr = historicalStats?.revenueCAGR ?? cagr;
+
   return (
     <div className={cn('bg-zinc-900/50 rounded-lg border border-zinc-800', className)}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <History size={16} className="text-cyan-400" />
-          <h3 className="text-sm font-semibold text-zinc-200">Historical Trends (5 Years)</h3>
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Historical Trends ({historicalData.length} Years)
+          </h3>
           {company && <span className="text-xs text-zinc-500">{company.ticker}</span>}
+          {/* Data source indicator */}
+          {hasRealData ? (
+            <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-900/50 text-emerald-400 text-xs rounded-full">
+              <Database size={10} />
+              SEC Data
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-900/50 text-amber-400 text-xs rounded-full">
+              <Sparkles size={10} />
+              Simulated
+            </span>
+          )}
+          {isLoadingHistorical && (
+            <span className="text-xs text-zinc-500 animate-pulse">Loading...</span>
+          )}
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span className="text-zinc-500">Revenue CAGR:</span>
-          <span className={cn('font-mono font-bold', cagr >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-            {cagr >= 0 ? '+' : ''}{cagr.toFixed(1)}%
+          <span className={cn('font-mono font-bold', displayCagr >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+            {displayCagr >= 0 ? '+' : ''}{displayCagr.toFixed(1)}%
           </span>
         </div>
       </div>
+
+      {/* Real data quality notice */}
+      {hasRealData && historicalStats && (
+        <div className="px-4 py-2 bg-zinc-900/30 border-b border-zinc-800 flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-1 text-zinc-400">
+            <span>Margin Trend:</span>
+            <span className={cn(
+              'font-medium',
+              historicalStats.marginTrend === 'expanding' ? 'text-emerald-400' :
+              historicalStats.marginTrend === 'contracting' ? 'text-red-400' : 'text-zinc-300'
+            )}>
+              {historicalStats.marginTrend.charAt(0).toUpperCase() + historicalStats.marginTrend.slice(1)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-zinc-400">
+            <span>Revenue Volatility:</span>
+            <span className={cn(
+              'font-mono',
+              historicalStats.revenueVolatility > 15 ? 'text-amber-400' : 'text-zinc-300'
+            )}>
+              {historicalStats.revenueVolatility.toFixed(1)}%
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Simulated data warning */}
+      {!hasRealData && (
+        <div className="px-4 py-2 bg-amber-900/20 border-b border-amber-800/30 flex items-center gap-2 text-xs text-amber-400">
+          <AlertCircle size={12} />
+          <span>Showing simulated historical data. Extract from SEC filings for real data.</span>
+        </div>
+      )}
 
       {/* Category Tabs */}
       <div className="flex items-center gap-1 px-4 py-2 border-b border-zinc-800 bg-zinc-900/30 overflow-x-auto">

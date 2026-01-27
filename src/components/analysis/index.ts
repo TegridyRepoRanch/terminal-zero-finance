@@ -6,3 +6,7 @@ export { PrecedentTransactions } from './PrecedentTransactions';
 export { HistoricalTrends } from './HistoricalTrends';
 export { PeerComparison } from './PeerComparison';
 export { QuarterlyProjections } from './QuarterlyProjections';
+export { InvestmentMetrics } from './InvestmentMetrics';
+export { InvestmentThesis } from './InvestmentThesis';
+export { BreakEvenCalculator } from './BreakEvenCalculator';
+export { PriceTargetCalculator } from './PriceTargetCalculator';

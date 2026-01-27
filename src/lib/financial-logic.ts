@@ -797,3 +797,219 @@ export function formatPercent(value: number, decimals = 1): string {
 export function formatNumber(value: number): string {
     return new Intl.NumberFormat('en-US').format(Math.round(value));
 }
+
+// =============================================================================
+// REVERSE DCF - IMPLIED GROWTH RATE CALCULATION
+// =============================================================================
+
+export interface ReverseDCFResult {
+    impliedGrowthRate: number;
+    marketPrice: number;
+    currentDCFPrice: number;
+    isOvervalued: boolean;
+    growthPremium: number; // Difference between implied and assumed growth
+    convergenceIterations: number;
+    sensitivity: ReverseDCFSensitivity;
+}
+
+export interface ReverseDCFSensitivity {
+    growthRateAt10PercentDiscount: number;
+    growthRateAt20PercentDiscount: number;
+    growthRateAt10PercentPremium: number;
+    growthRateAt20PercentPremium: number;
+}
+
+/**
+ * Calculates the implied revenue growth rate that would justify the current market price.
+ *
+ * This is the "reverse" of DCF - instead of calculating price from growth assumptions,
+ * we solve for what growth rate the market is implicitly assuming given the current price.
+ *
+ * Uses binary search to find the growth rate that produces a DCF value matching the market price.
+ *
+ * @param assumptions - Current DCF assumptions (growth rate will be varied)
+ * @param marketPrice - Current market price per share
+ * @param maxIterations - Maximum iterations for convergence (default: 50)
+ * @param tolerance - Price tolerance for convergence (default: 0.01 = 1 cent)
+ * @returns ReverseDCFResult with implied growth rate and analysis
+ */
+export function calculateReverseDCF(
+    assumptions: Assumptions,
+    marketPrice: number,
+    maxIterations = 50,
+    tolerance = 0.01
+): ReverseDCFResult {
+    // Binary search bounds for growth rate
+    let lowGrowth = -30; // -30% (severe decline)
+    let highGrowth = 50; // 50% (aggressive growth)
+    let midGrowth = assumptions.revenueGrowthRate;
+    let iterations = 0;
+
+    // Calculate current DCF price with existing assumptions
+    const currentResult = calculateAllSchedules(assumptions);
+    const currentDCFPrice = currentResult.valuation.impliedSharePrice;
+
+    // Binary search for the growth rate that matches market price
+    while (iterations < maxIterations) {
+        iterations++;
+        midGrowth = (lowGrowth + highGrowth) / 2;
+
+        const testAssumptions: Assumptions = {
+            ...assumptions,
+            revenueGrowthRate: midGrowth,
+        };
+
+        const result = calculateAllSchedules(testAssumptions);
+        const calculatedPrice = result.valuation.impliedSharePrice;
+
+        const priceDiff = calculatedPrice - marketPrice;
+
+        // Check if we're close enough
+        if (Math.abs(priceDiff) < tolerance) {
+            break;
+        }
+
+        // Adjust search bounds
+        if (calculatedPrice > marketPrice) {
+            // Calculated price too high, need lower growth
+            highGrowth = midGrowth;
+        } else {
+            // Calculated price too low, need higher growth
+            lowGrowth = midGrowth;
+        }
+    }
+
+    const impliedGrowthRate = midGrowth;
+    const isOvervalued = impliedGrowthRate > assumptions.revenueGrowthRate;
+    const growthPremium = impliedGrowthRate - assumptions.revenueGrowthRate;
+
+    // Calculate sensitivity at different price points
+    const sensitivity = calculateReverseDCFSensitivity(assumptions, marketPrice);
+
+    return {
+        impliedGrowthRate,
+        marketPrice,
+        currentDCFPrice,
+        isOvervalued,
+        growthPremium,
+        convergenceIterations: iterations,
+        sensitivity,
+    };
+}
+
+/**
+ * Calculate implied growth rates at various price discount/premium levels
+ */
+function calculateReverseDCFSensitivity(
+    assumptions: Assumptions,
+    marketPrice: number
+): ReverseDCFSensitivity {
+    const at10Discount = calculateReverseDCF(assumptions, marketPrice * 0.9, 30, 0.1);
+    const at20Discount = calculateReverseDCF(assumptions, marketPrice * 0.8, 30, 0.1);
+    const at10Premium = calculateReverseDCF(assumptions, marketPrice * 1.1, 30, 0.1);
+    const at20Premium = calculateReverseDCF(assumptions, marketPrice * 1.2, 30, 0.1);
+
+    return {
+        growthRateAt10PercentDiscount: at10Discount.impliedGrowthRate,
+        growthRateAt20PercentDiscount: at20Discount.impliedGrowthRate,
+        growthRateAt10PercentPremium: at10Premium.impliedGrowthRate,
+        growthRateAt20PercentPremium: at20Premium.impliedGrowthRate,
+    };
+}
+
+// =============================================================================
+// MARGIN OF SAFETY CALCULATION
+// =============================================================================
+
+export interface MarginOfSafetyResult {
+    dcfValue: number;
+    marketPrice: number;
+    marginOfSafety: number; // Percentage (positive = undervalued)
+    absoluteGap: number; // Dollar difference
+    verdict: 'deep-value' | 'undervalued' | 'fair-value' | 'overvalued' | 'extremely-overvalued';
+    verdictDescription: string;
+    requiredGrowthForFairValue: number; // Growth rate needed for DCF to match price
+}
+
+/**
+ * Calculate the margin of safety between DCF intrinsic value and market price.
+ *
+ * Margin of Safety = (DCF Value - Market Price) / DCF Value * 100
+ *
+ * Positive margin = stock is undervalued (trading below intrinsic value)
+ * Negative margin = stock is overvalued (trading above intrinsic value)
+ *
+ * @param assumptions - DCF model assumptions
+ * @param marketPrice - Current market price per share
+ * @returns MarginOfSafetyResult with valuation analysis
+ */
+export function calculateMarginOfSafety(
+    assumptions: Assumptions,
+    marketPrice: number
+): MarginOfSafetyResult {
+    // Calculate DCF intrinsic value
+    const result = calculateAllSchedules(assumptions);
+    const dcfValue = result.valuation.impliedSharePrice;
+
+    // Calculate margin of safety
+    const absoluteGap = dcfValue - marketPrice;
+    const marginOfSafety = dcfValue > 0 ? (absoluteGap / dcfValue) * 100 : 0;
+
+    // Determine verdict based on margin of safety
+    let verdict: MarginOfSafetyResult['verdict'];
+    let verdictDescription: string;
+
+    if (marginOfSafety >= 40) {
+        verdict = 'deep-value';
+        verdictDescription = 'Trading at a significant discount to intrinsic value. Strong buy candidate if thesis is sound.';
+    } else if (marginOfSafety >= 15) {
+        verdict = 'undervalued';
+        verdictDescription = 'Trading below intrinsic value. Potential upside exists if assumptions are correct.';
+    } else if (marginOfSafety >= -15) {
+        verdict = 'fair-value';
+        verdictDescription = 'Trading near intrinsic value. Returns will depend on execution vs. assumptions.';
+    } else if (marginOfSafety >= -40) {
+        verdict = 'overvalued';
+        verdictDescription = 'Trading above intrinsic value. Current price implies aggressive growth expectations.';
+    } else {
+        verdict = 'extremely-overvalued';
+        verdictDescription = 'Trading at significant premium to intrinsic value. Very aggressive assumptions baked in.';
+    }
+
+    // Calculate what growth rate would be needed for fair value
+    const reverseDCF = calculateReverseDCF(assumptions, marketPrice);
+
+    return {
+        dcfValue,
+        marketPrice,
+        marginOfSafety,
+        absoluteGap,
+        verdict,
+        verdictDescription,
+        requiredGrowthForFairValue: reverseDCF.impliedGrowthRate,
+    };
+}
+
+/**
+ * Get the appropriate color for margin of safety display
+ */
+export function getMarginOfSafetyColor(marginOfSafety: number): string {
+    if (marginOfSafety >= 40) return 'text-emerald-500';
+    if (marginOfSafety >= 15) return 'text-green-500';
+    if (marginOfSafety >= -15) return 'text-yellow-500';
+    if (marginOfSafety >= -40) return 'text-orange-500';
+    return 'text-red-500';
+}
+
+/**
+ * Get the appropriate background color for margin of safety badge
+ */
+export function getMarginOfSafetyBgColor(verdict: MarginOfSafetyResult['verdict']): string {
+    switch (verdict) {
+        case 'deep-value': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+        case 'undervalued': return 'bg-green-500/20 text-green-400 border-green-500/30';
+        case 'fair-value': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+        case 'overvalued': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+        case 'extremely-overvalued': return 'bg-red-500/20 text-red-400 border-red-500/30';
+    }
+}

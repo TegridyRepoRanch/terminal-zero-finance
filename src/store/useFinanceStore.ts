@@ -16,7 +16,7 @@ import type {
     DebtRow,
     ValuationResult,
 } from '../lib/financial-logic';
-import type { ExtractionMetadata } from '../lib/extraction-types';
+import type { ExtractionMetadata, HistoricalFinancials, HistoricalStats, SegmentAnalysis } from '../lib/extraction-types';
 import { fetchStockPriceCached } from '../lib/stock-api';
 
 // Data source tracking
@@ -136,11 +136,20 @@ interface FinanceState {
     valuation: ValuationResult;
 
     // Current view
-    activeTab: 'income' | 'balance' | 'cashflow' | 'depreciation' | 'debt' | 'valuation';
+    activeTab: 'income' | 'balance' | 'cashflow' | 'depreciation' | 'debt' | 'valuation' | 'dd';
 
     // Data source tracking
     dataSource: DataSource;
     extractionMetadata: ExtractionMetadata | null;
+
+    // Historical data for multi-year analysis
+    historicalData: HistoricalFinancials | null;
+    historicalStats: HistoricalStats | null;
+    isLoadingHistorical: boolean;
+
+    // Segment/geographic data
+    segmentAnalysis: SegmentAnalysis | null;
+    isLoadingSegments: boolean;
 
     // Company actions
     setCompany: (company: CompanyInfo | null) => void;
@@ -164,6 +173,16 @@ interface FinanceState {
     // Utility
     getScenarioValuation: (scenarioId: string) => ValuationResult | null;
     getAllScenarioValuations: () => Array<{ scenario: Scenario; valuation: ValuationResult }>;
+
+    // Historical data actions
+    setHistoricalData: (data: HistoricalFinancials, stats: HistoricalStats) => void;
+    setLoadingHistorical: (loading: boolean) => void;
+    clearHistoricalData: () => void;
+
+    // Segment data actions
+    setSegmentAnalysis: (analysis: SegmentAnalysis) => void;
+    setLoadingSegments: (loading: boolean) => void;
+    clearSegmentAnalysis: () => void;
 }
 
 function recalculate(assumptions: Assumptions) {
@@ -189,6 +208,11 @@ export const useFinanceStore = create<FinanceState>()(
             activeTab: 'valuation',
             dataSource: 'manual',
             extractionMetadata: null,
+            historicalData: null,
+            historicalStats: null,
+            isLoadingHistorical: false,
+            segmentAnalysis: null,
+            isLoadingSegments: false,
 
             setCompany: (company) => {
                 set({ company, searchQuery: '' });
@@ -496,6 +520,44 @@ export const useFinanceStore = create<FinanceState>()(
                     valuation: recalculate(scenario.assumptions).valuation,
                 }));
             },
+
+            setHistoricalData: (data, stats) => {
+                set({
+                    historicalData: data,
+                    historicalStats: stats,
+                    isLoadingHistorical: false,
+                });
+            },
+
+            setLoadingHistorical: (loading) => {
+                set({ isLoadingHistorical: loading });
+            },
+
+            clearHistoricalData: () => {
+                set({
+                    historicalData: null,
+                    historicalStats: null,
+                    isLoadingHistorical: false,
+                });
+            },
+
+            setSegmentAnalysis: (analysis) => {
+                set({
+                    segmentAnalysis: analysis,
+                    isLoadingSegments: false,
+                });
+            },
+
+            setLoadingSegments: (loading) => {
+                set({ isLoadingSegments: loading });
+            },
+
+            clearSegmentAnalysis: () => {
+                set({
+                    segmentAnalysis: null,
+                    isLoadingSegments: false,
+                });
+            },
         }),
         {
             name: 'terminal-zero-finance-storage',
@@ -509,7 +571,10 @@ export const useFinanceStore = create<FinanceState>()(
                 activeTab: state.activeTab,
                 dataSource: state.dataSource,
                 extractionMetadata: state.extractionMetadata,
-                // Don't persist: assumptions (derived), calculated values
+                historicalData: state.historicalData,
+                historicalStats: state.historicalStats,
+                segmentAnalysis: state.segmentAnalysis,
+                // Don't persist: assumptions (derived), calculated values, loading states
             }),
             migrate: (persistedState, version) => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any

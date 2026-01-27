@@ -14,6 +14,7 @@ import type {
 // SEC filing data from SEC EDGAR API
 export interface SECFilingData {
   text: string;
+  rawHtml: string; // Raw HTML for XBRL parsing
   originalLength: number;
   source: 'sec';
   metadata: {
@@ -47,6 +48,9 @@ interface UploadState {
   warnings: ExtractionWarning[];
   metadata: ExtractionMetadata | null;
 
+  // Force re-extraction flag (skip cache)
+  forceReextract: boolean;
+
   // Error handling
   error: string | null;
 
@@ -65,6 +69,7 @@ interface UploadState {
   setMetadata: (metadata: ExtractionMetadata) => void;
   setError: (error: string) => void;
   clearError: () => void;
+  setForceReextract: (force: boolean) => void;
   reset: () => void;
 }
 
@@ -81,6 +86,7 @@ const initialState = {
   derivedMetrics: null,
   warnings: [],
   metadata: null,
+  forceReextract: false,
   error: null,
 };
 
@@ -154,6 +160,10 @@ export const useUploadStore = create<UploadState>((set) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  setForceReextract: (force: boolean) => {
+    set({ forceReextract: force });
   },
 
   reset: () => {

@@ -255,11 +255,12 @@ export async function getRecentFilings(
 
 /**
  * Fetch and extract text from a filing document
+ * Returns both raw HTML (for XBRL parsing) and extracted text (for AI)
  */
 export async function fetchFilingDocument(
     filing: SECFiling,
     onProgress?: (message: string) => void
-): Promise<{ text: string; url: string; metadata: SECFiling }> {
+): Promise<{ text: string; rawHtml: string; url: string; metadata: SECFiling }> {
     const accessionNumberClean = filing.accessionNumber.replace(/-/g, '');
     const url = `${SEC_ENDPOINTS.ARCHIVES}/${filing.cik}/${accessionNumberClean}/${filing.primaryDocument}`;
 
@@ -275,24 +276,27 @@ export async function fetchFilingDocument(
 
         const contentType = response.headers.get('content-type') || '';
         let text: string;
+        let rawHtml: string = '';
 
         if (contentType.includes('text/html') || filing.primaryDocument.endsWith('.htm')) {
-            // Parse HTML and extract text
-            const html = await response.text();
-            text = extractTextFromHTML(html);
+            // Parse HTML and extract text, keep raw for XBRL parsing
+            rawHtml = await response.text();
+            text = extractTextFromHTML(rawHtml);
             onProgress?.('Parsed HTML filing document...');
         } else if (contentType.includes('text/plain') || filing.primaryDocument.endsWith('.txt')) {
             // Plain text file
             text = await response.text();
+            rawHtml = text;
             onProgress?.('Loaded text filing document...');
         } else {
             // Try to get as text anyway
-            text = await response.text();
+            rawHtml = await response.text();
+            text = rawHtml;
             onProgress?.('Loaded filing document...');
         }
 
-        console.log(`[SEC] Document loaded, text length: ${text.length} chars`);
-        return { text, url, metadata: filing };
+        console.log(`[SEC] Document loaded, text: ${text.length} chars, rawHtml: ${rawHtml.length} chars`);
+        return { text, rawHtml, url, metadata: filing };
     } catch (error) {
         console.error('[SEC] Document fetch error:', error);
         throw new Error(`Failed to fetch document: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -346,12 +350,13 @@ function extractTextFromHTML(html: string): string {
 
 /**
  * Fetch latest filing using backend proxy (preferred method)
+ * Returns both raw HTML (for XBRL parsing) and extracted text (for AI)
  */
 async function fetchLatestFilingViaBackend(
     ticker: string,
     formType: '10-K' | '10-Q',
     onProgress?: (message: string) => void
-): Promise<{ text: string; url: string; metadata: SECFiling }> {
+): Promise<{ text: string; rawHtml: string; url: string; metadata: SECFiling }> {
     onProgress?.(`Looking up ${ticker.toUpperCase()} via backend...`);
 
     const backendUrl = `${BACKEND_URL}/api/sec/latest-filing`;
@@ -383,15 +388,19 @@ async function fetchLatestFilingViaBackend(
 
         onProgress?.(`Found ${filing.companyName} ${formType} from ${filing.filingDate}`);
 
-        // Extract text from HTML if needed
+        // Keep raw HTML for XBRL parsing, extract text for AI
+        const rawHtml = content;
         let text = content;
         if (filing.primaryDocument?.endsWith('.htm')) {
             text = extractTextFromHTML(content);
             onProgress?.('Parsed HTML filing document...');
         }
 
+        console.log(`[SEC] Backend fetch complete, text: ${text.length} chars, rawHtml: ${rawHtml.length} chars`);
+
         return {
             text,
+            rawHtml,
             url,
             metadata: filing,
         };
@@ -403,11 +412,12 @@ async function fetchLatestFilingViaBackend(
 
 /**
  * Convenience function: Fetch latest 10-K for a ticker
+ * Returns both raw HTML (for XBRL parsing) and extracted text (for AI)
  */
 export async function fetchLatest10K(
     ticker: string,
     onProgress?: (message: string) => void
-): Promise<{ text: string; url: string; metadata: SECFiling }> {
+): Promise<{ text: string; rawHtml: string; url: string; metadata: SECFiling }> {
     const shouldUseBackend = useBackend();
     console.log('[SEC] fetchLatest10K - useBackend:', shouldUseBackend);
 
@@ -445,12 +455,201 @@ export async function fetchLatest10K(
 }
 
 /**
+ * Fetch multiple years of 10-K filings for historical analysis
+ * Returns array of filing documents sorted by date (newest first)
+ */
+export async function fetchHistorical10Ks(
+    ticker: string,
+    years: number = 5,
+    onProgress?: (message: string, current: number, total: number) => void
+): Promise<Array<{ text: string; rawHtml: string; url: string; metadata: SECFiling }>> {
+    console.log(`[SEC] Fetching ${years} years of 10-K filings for ${ticker}...`);
+    onProgress?.(`Looking up ${ticker.toUpperCase()} filings...`, 0, years);
+
+    // First get the list of recent filings
+    const filings = await getRecentFilings(ticker, '10-K', years);
+
+    if (filings.length === 0) {
+        throw new Error(`No 10-K filings found for ${ticker.toUpperCase()}`);
+    }
+
+    console.log(`[SEC] Found ${filings.length} 10-K filings, fetching documents...`);
+
+    const results: Array<{ text: string; rawHtml: string; url: string; metadata: SECFiling }> = [];
+
+    // Fetch each filing document
+    for (let i = 0; i < filings.length; i++) {
+        const filing = filings[i];
+        onProgress?.(
+            `Downloading ${filing.companyName} 10-K from ${filing.filingDate}...`,
+            i + 1,
+            filings.length
+        );
+
+        try {
+            const doc = await fetchFilingDocument(filing);
+            results.push(doc);
+            console.log(`[SEC] Fetched 10-K ${i + 1}/${filings.length}: ${filing.filingDate}`);
+        } catch (error) {
+            console.error(`[SEC] Failed to fetch 10-K from ${filing.filingDate}:`, error);
+            // Continue with other filings even if one fails
+        }
+    }
+
+    if (results.length === 0) {
+        throw new Error(`Failed to fetch any 10-K documents for ${ticker.toUpperCase()}`);
+    }
+
+    console.log(`[SEC] Successfully fetched ${results.length} 10-K filings`);
+    return results;
+}
+
+/**
+ * Fetch multiple years of 10-K filings via backend (preferred for production)
+ */
+export async function fetchHistorical10KsViaBackend(
+    ticker: string,
+    years: number = 5,
+    onProgress?: (message: string, current: number, total: number) => void
+): Promise<Array<{ text: string; rawHtml: string; url: string; metadata: SECFiling }>> {
+    onProgress?.(`Looking up ${ticker.toUpperCase()} historical filings via backend...`, 0, years);
+
+    const backendUrl = `${BACKEND_URL}/api/sec/historical-filings`;
+    console.log(`[SEC] Fetching historical filings via backend: ${backendUrl}`);
+
+    try {
+        const response = await fetch(backendUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ticker, formType: '10-K', years }),
+            credentials: 'include',
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[SEC] Backend historical fetch error:', response.status, errorText);
+            throw new Error(`Backend HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+        }
+
+        const result = await response.json();
+
+        if (result.status !== 'success') {
+            throw new Error(result.error || 'Backend request failed');
+        }
+
+        const filings = result.data.filings as Array<{
+            filing: SECFiling;
+            content: string;
+            url: string;
+        }>;
+
+        onProgress?.(`Found ${filings.length} historical filings`, filings.length, years);
+
+        // Process each filing
+        const results = filings.map((f, i) => {
+            const rawHtml = f.content;
+            let text = f.content;
+            if (f.filing.primaryDocument?.endsWith('.htm')) {
+                text = extractTextFromHTMLExported(rawHtml);
+            }
+            onProgress?.(`Processed ${f.filing.filingDate} 10-K`, i + 1, filings.length);
+            return {
+                text,
+                rawHtml,
+                url: f.url,
+                metadata: f.filing,
+            };
+        });
+
+        console.log(`[SEC] Backend historical fetch complete: ${results.length} filings`);
+        return results;
+    } catch (error) {
+        console.error('[SEC] Backend historical fetch failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Exported version of extractTextFromHTML for use by other functions
+ */
+function extractTextFromHTMLExported(html: string): string {
+    // Remove scripts and styles
+    let text = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
+
+    // Convert common HTML entities
+    text = text
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&mdash;/g, '—')
+        .replace(/&ndash;/g, '–')
+        .replace(/&#\d+;/g, ' ');
+
+    // Convert table cells to preserve structure
+    text = text
+        .replace(/<\/td>/gi, '\t')
+        .replace(/<\/tr>/gi, '\n')
+        .replace(/<\/th>/gi, '\t')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n');
+
+    // Remove all remaining HTML tags
+    text = text.replace(/<[^>]+>/g, '');
+
+    // Clean up whitespace
+    text = text
+        .replace(/\t+/g, '\t')
+        .replace(/[ ]+/g, ' ')
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+        .trim();
+
+    return text;
+}
+
+/**
+ * Fetch historical 10-K filings with automatic backend/fallback selection
+ */
+export async function fetchHistorical10KsAuto(
+    ticker: string,
+    years: number = 5,
+    onProgress?: (message: string, current: number, total: number) => void
+): Promise<Array<{ text: string; rawHtml: string; url: string; metadata: SECFiling }>> {
+    const shouldUseBackend = useBackend();
+    console.log('[SEC] fetchHistorical10KsAuto - useBackend:', shouldUseBackend);
+
+    if (shouldUseBackend) {
+        try {
+            console.log('[SEC] Attempting backend historical fetch...');
+            return await fetchHistorical10KsViaBackend(ticker, years, onProgress);
+        } catch (backendError) {
+            console.error('[SEC] Backend historical fetch FAILED:', backendError);
+            // Fall back to CORS proxy method
+            console.log('[SEC] Falling back to CORS proxy method...');
+        }
+    }
+
+    // Fallback to direct fetch via CORS proxies
+    return fetchHistorical10Ks(ticker, years, onProgress);
+}
+
+/**
  * Convenience function: Fetch latest 10-Q for a ticker
+ * Returns both raw HTML (for XBRL parsing) and extracted text (for AI)
  */
 export async function fetchLatest10Q(
     ticker: string,
     onProgress?: (message: string) => void
-): Promise<{ text: string; url: string; metadata: SECFiling }> {
+): Promise<{ text: string; rawHtml: string; url: string; metadata: SECFiling }> {
     const shouldUseBackend = useBackend();
     console.log('[SEC] fetchLatest10Q - useBackend:', shouldUseBackend);
 
