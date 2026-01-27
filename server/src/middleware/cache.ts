@@ -193,7 +193,7 @@ export function cacheMiddleware(req: Request, res: Response, next: NextFunction)
   const cached = geminiCache.get(req.body);
   if (cached) {
     console.log(`[Cache] HIT - Returning cached response (Hit rate: ${geminiCache.getHitRate().toFixed(1)}%)`);
-    return res.json({ data: cached, cached: true });
+    return res.json({ status: 'success', data: cached, cached: true });
   }
 
   console.log(`[Cache] MISS - Fetching from API (Hit rate: ${geminiCache.getHitRate().toFixed(1)}%)`);
@@ -202,7 +202,7 @@ export function cacheMiddleware(req: Request, res: Response, next: NextFunction)
   const originalJson = res.json.bind(res);
 
   // Override json method to cache response
-  res.json = function (body: { data?: unknown; error?: string }) {
+  res.json = function (body: { status?: string; data?: unknown; error?: string }) {
     // Only cache successful responses
     if (body.data && !body.error) {
       geminiCache.set(req.body, body.data);
