@@ -147,7 +147,8 @@ export function mergeXBRLWithAI(
     const aiValue = aiRecord[field];
 
     // If XBRL doesn't have the value, use AI value
-    if (xbrlValue === undefined || xbrlValue === null || xbrlValue === 0) {
+    // Note: 0 is a valid value (e.g., no debt, no inventory) - don't overwrite with AI
+    if (xbrlValue === undefined || xbrlValue === null) {
       if (aiValue !== undefined && aiValue !== null) {
         mergedRecord[field] = aiValue;
         aiFieldsUsed.push(field);

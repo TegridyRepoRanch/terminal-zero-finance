@@ -552,7 +552,7 @@ export async function fetchHistorical10KsViaBackend(
             const rawHtml = f.content;
             let text = f.content;
             if (f.filing.primaryDocument?.endsWith('.htm')) {
-                text = extractTextFromHTMLExported(rawHtml);
+                text = extractTextFromHTML(rawHtml);
             }
             onProgress?.(`Processed ${f.filing.filingDate} 10-K`, i + 1, filings.length);
             return {
@@ -571,50 +571,6 @@ export async function fetchHistorical10KsViaBackend(
     }
 }
 
-/**
- * Exported version of extractTextFromHTML for use by other functions
- */
-function extractTextFromHTMLExported(html: string): string {
-    // Remove scripts and styles
-    let text = html
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-        .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
-
-    // Convert common HTML entities
-    text = text
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&mdash;/g, '—')
-        .replace(/&ndash;/g, '–')
-        .replace(/&#\d+;/g, ' ');
-
-    // Convert table cells to preserve structure
-    text = text
-        .replace(/<\/td>/gi, '\t')
-        .replace(/<\/tr>/gi, '\n')
-        .replace(/<\/th>/gi, '\t')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n\n')
-        .replace(/<\/div>/gi, '\n')
-        .replace(/<\/li>/gi, '\n');
-
-    // Remove all remaining HTML tags
-    text = text.replace(/<[^>]+>/g, '');
-
-    // Clean up whitespace
-    text = text
-        .replace(/\t+/g, '\t')
-        .replace(/[ ]+/g, ' ')
-        .replace(/\n\s*\n\s*\n/g, '\n\n')
-        .trim();
-
-    return text;
-}
 
 /**
  * Fetch historical 10-K filings with automatic backend/fallback selection

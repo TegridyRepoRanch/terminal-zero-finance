@@ -50,26 +50,30 @@ function calculateBreakEven(
 ): BreakEvenResults {
     const { entryPrice, shares, targetReturn, commissionPerTrade, taxRate } = inputs;
 
-    const totalInvestment = entryPrice * shares;
+    // Guard against invalid inputs that would cause division by zero
+    const safeShares = shares > 0 ? shares : 1;
+    const safeEntryPrice = entryPrice > 0 ? entryPrice : 1;
+
+    const totalInvestment = safeEntryPrice * safeShares;
     const totalCosts = commissionPerTrade * 2; // Entry and exit
 
     // Break-even price: must cover investment + costs
     const breakEvenValue = totalInvestment + totalCosts;
-    const breakEvenPrice = breakEvenValue / shares;
-    const breakEvenPercent = ((breakEvenPrice - entryPrice) / entryPrice) * 100;
+    const breakEvenPrice = breakEvenValue / safeShares;
+    const breakEvenPercent = ((breakEvenPrice - safeEntryPrice) / safeEntryPrice) * 100;
 
     // Target price for desired return
     const targetGrossProfit = totalInvestment * (targetReturn / 100);
-    const targetPrice = (totalInvestment + targetGrossProfit + totalCosts) / shares;
-    const targetProfit = (targetPrice * shares) - totalInvestment - totalCosts;
+    const targetPrice = (totalInvestment + targetGrossProfit + totalCosts) / safeShares;
+    const targetProfit = (targetPrice * safeShares) - totalInvestment - totalCosts;
     const profitAfterTax = targetProfit * (1 - taxRate / 100);
 
     // Risk/reward ratio if stop loss is set
     let riskRewardRatio: number | null = null;
-    if (stopLossPrice && stopLossPrice < entryPrice) {
-        const riskPerShare = entryPrice - stopLossPrice;
-        const rewardPerShare = targetPrice - entryPrice;
-        riskRewardRatio = rewardPerShare / riskPerShare;
+    if (stopLossPrice && stopLossPrice < safeEntryPrice) {
+        const riskPerShare = safeEntryPrice - stopLossPrice;
+        const rewardPerShare = targetPrice - safeEntryPrice;
+        riskRewardRatio = riskPerShare > 0 ? rewardPerShare / riskPerShare : null;
     }
 
     return {

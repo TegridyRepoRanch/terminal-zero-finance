@@ -39,8 +39,9 @@ const STEPS: ProcessingStep[] = [
 ];
 
 // Confidence threshold to skip AI extraction entirely (XBRL data is sufficient)
-// When XBRL confidence >= 80%, we trust the structured data and skip hallucination-prone AI
-const XBRL_SKIP_AI_THRESHOLD = 80;
+// When XBRL confidence >= 40%, we trust the structured data and skip hallucination-prone AI
+// Lower threshold prevents AI timeout issues on Vercel (55s limit) and avoids AI hallucination
+const XBRL_SKIP_AI_THRESHOLD = 40;
 
 export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingScreenProps) {
   const {
