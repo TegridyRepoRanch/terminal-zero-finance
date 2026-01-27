@@ -22,10 +22,12 @@ export interface XBRLExtractionResult {
 const XBRL_FIELD_CONFIDENCE = 95;
 
 // Minimum confidence threshold to use XBRL as primary source
-const XBRL_MIN_CONFIDENCE = 0.5;
+// Lower threshold (40%) to accept partial XBRL data and reduce AI fallback timeouts
+const XBRL_MIN_CONFIDENCE = 0.4;
 
 // Fields that MUST be found for XBRL to be usable
-const REQUIRED_XBRL_FIELDS = ['revenue', 'totalAssets'];
+// Only require revenue - totalAssets often uses different XBRL concepts
+const REQUIRED_XBRL_FIELDS = ['revenue'];
 
 /**
  * Try to extract financials from XBRL data in HTML

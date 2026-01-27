@@ -24,8 +24,8 @@ export const config = {
   rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10), // 15 minutes
   rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100', 10),
 
-  // Timeouts
-  geminiTimeout: 170000, // ~3 minutes (just under Vercel's 180s limit)
+  // Timeouts - reduced to fit within Vercel limits (60s Hobby, 300s Pro)
+  geminiTimeout: 55000, // 55 seconds - safe for Hobby plan with buffer
 
   // Validation
   maxTextLength: 500000, // 500KB max text input
