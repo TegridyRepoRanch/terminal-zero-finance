@@ -9,10 +9,12 @@ import { MessageInput } from './MessageInput';
 import { AIDiscussionControls } from './AIDiscussionControls';
 import { ContextPanel } from './ContextPanel';
 import { ConversationList } from './ConversationList';
+import { DDPromptSelector } from './DDPromptSelector';
 
 export default function DDChat() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [completedTemplates, setCompletedTemplates] = useState<string[]>([]);
 
   // Finance store for context
   const company = useFinanceStore(s => s.company);
@@ -71,6 +73,19 @@ export default function DDChat() {
       await createNewConversation();
     }
     sendMessage(content, target);
+  };
+
+  // Handle template selection
+  const handleSelectTemplate = async (prompt: string, templateId: string) => {
+    if (!activeConversationId && company?.ticker) {
+      await createNewConversation();
+    }
+    // Send to both AIs by default for analysis templates
+    sendMessage(prompt, 'both');
+    // Track completed templates
+    if (!completedTemplates.includes(templateId)) {
+      setCompletedTemplates(prev => [...prev, templateId]);
+    }
   };
 
   // Handle starting AI discussion
@@ -164,6 +179,17 @@ export default function DDChat() {
               currentModel={currentDiscussionModel}
               onStart={handleStartDiscussion}
               onStop={stopAIDiscussion}
+            />
+          </div>
+        )}
+
+        {/* DD Analysis Templates - show when no messages or always as collapsible */}
+        {chatMode !== 'ai-to-ai' && (
+          <div className="px-4 pt-4">
+            <DDPromptSelector
+              onSelectPrompt={handleSelectTemplate}
+              completedTemplates={completedTemplates}
+              disabled={isStreaming}
             />
           </div>
         )}

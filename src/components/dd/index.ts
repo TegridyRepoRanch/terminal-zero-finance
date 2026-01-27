@@ -6,3 +6,4 @@ export { MessageInput } from './MessageInput';
 export { AIDiscussionControls } from './AIDiscussionControls';
 export { ContextPanel } from './ContextPanel';
 export { ConversationList } from './ConversationList';
+export { DDPromptSelector } from './DDPromptSelector';
