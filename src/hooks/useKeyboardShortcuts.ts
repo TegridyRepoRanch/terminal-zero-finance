@@ -11,7 +11,7 @@ export interface KeyboardShortcut {
   action: () => void;
 }
 
-const TAB_ORDER = ['valuation', 'income', 'balance', 'cashflow', 'depreciation', 'debt', 'dd'] as const;
+const TAB_ORDER = ['dashboard', 'watchlist', 'company', 'valuation', 'income', 'balance', 'cashflow', 'depreciation', 'debt', 'dd', 'settings'] as const;
 
 export function useKeyboardShortcuts() {
   const { activeTab, setActiveTab, resetToDefaults } = useFinanceStore();

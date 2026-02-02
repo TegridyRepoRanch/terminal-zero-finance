@@ -3,14 +3,14 @@
 // Supports: Email, Webhooks, In-App, Slack, and more
 
 import type { FilingAlert } from './sec-alerts';
-import type { DetectedTheme } from './theme-detector';
+import type { MarketTheme } from './theme-detector';
 import type { EarningsAnalysis } from './earnings-analyzer';
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-export type NotificationChannel = 'email' | 'webhook' | 'slack' | 'in_app' | 'sms';
+export type NotificationChannel = 'email' | 'webhook' | 'slack' | 'inApp' | 'sms';
 export type NotificationPriority = 'critical' | 'high' | 'medium' | 'low';
 export type NotificationType =
   | 'sec_filing'
@@ -263,7 +263,7 @@ export class NotificationService {
             results.push(this.sendSlack(notification));
           }
           break;
-        case 'in_app':
+        case 'inApp':
           // In-app notifications are handled by listeners
           break;
       }
@@ -541,14 +541,14 @@ Time: ${notification.createdAt.toISOString()}
   /**
    * Send theme detection alert
    */
-  async notifyTheme(theme: DetectedTheme): Promise<Notification> {
+  async notifyTheme(theme: MarketTheme): Promise<Notification> {
     return this.notify('theme_detected', `Theme Detected: ${theme.name}`, theme.description, {
       priority: theme.confidence > 0.8 ? 'high' : 'medium',
       data: {
         category: theme.category,
-        affectedTickers: theme.affectedTickers,
-        signals: theme.signals,
-        tradingIdeas: theme.tradingIdeas,
+        affectedTickers: theme.companies,
+        sentiment: theme.sentiment,
+        confidence: theme.confidence,
       },
     });
   }
@@ -567,7 +567,7 @@ Time: ${notification.createdAt.toISOString()}
         managementTone: analysis.managementTone,
         redFlags: analysis.redFlags,
         guidanceChanges: analysis.guidanceChanges,
-        keyTakeaways: analysis.keyTakeaways,
+        keyTakeaway: analysis.keyTakeaway,
       },
     });
   }
@@ -645,7 +645,7 @@ Time: ${notification.createdAt.toISOString()}
   private getEnabledChannels(): NotificationChannel[] {
     const channels: NotificationChannel[] = [];
 
-    if (this.preferences.channels.inApp?.enabled) channels.push('in_app');
+    if (this.preferences.channels.inApp?.enabled) channels.push('inApp');
     if (this.preferences.channels.email?.enabled) channels.push('email');
     if (this.preferences.channels.webhook?.enabled) channels.push('webhook');
     if (this.preferences.channels.slack?.enabled) channels.push('slack');

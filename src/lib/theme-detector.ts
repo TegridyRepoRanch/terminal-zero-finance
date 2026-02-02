@@ -3,7 +3,8 @@
 // Analyzes patterns across companies to identify emerging themes, risks, and opportunities
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { EarningsAnalysis, RedFlag, TopicAnalysis } from './earnings-analyzer';
+import type { EarningsAnalysis } from './earnings-analyzer';
+// RedFlag, TopicAnalysis reserved for future cross-company risk aggregation
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -163,7 +164,7 @@ const THEME_PATTERNS = {
 
 export class ThemeDetector {
   private anthropic: Anthropic | null = null;
-  private detectedThemes: Map<string, MarketTheme> = new Map();
+  private themeCache: Map<string, MarketTheme> = new Map();
 
   constructor() {
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
@@ -173,6 +174,11 @@ export class ThemeDetector {
         dangerouslyAllowBrowser: true,
       });
     }
+  }
+
+  /** Get cached themes */
+  get cachedThemes(): MarketTheme[] {
+    return Array.from(this.themeCache.values());
   }
 
   /**
@@ -613,7 +619,7 @@ Focus on non-obvious connections that would provide alpha.`;
   /**
    * Generate sector-level signals
    */
-  private generateSectorSignals(analyses: EarningsAnalysis[], themes: MarketTheme[]): SectorSignal[] {
+  private generateSectorSignals(_analyses: EarningsAnalysis[], themes: MarketTheme[]): SectorSignal[] {
     // Group by sector (we'd need sector data for each company)
     // For now, use a simplified approach based on themes
     const signals: SectorSignal[] = [];
@@ -652,7 +658,7 @@ Focus on non-obvious connections that would provide alpha.`;
    */
   private generateTradingIdeas(
     themes: MarketTheme[],
-    analyses: EarningsAnalysis[]
+    _analyses: EarningsAnalysis[] // Reserved for company-specific signals
   ): ThemeDetectionResult['suggestedTrades'] {
     const trades: ThemeDetectionResult['suggestedTrades'] = [];
 

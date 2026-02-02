@@ -1,7 +1,7 @@
 // Enterprise Dashboard Component
 // Shows market themes, alerts, and portfolio overview
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -251,6 +251,7 @@ export function Dashboard() {
 
   const highPriorityAlerts = useHighPriorityAlerts();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const alertCount = highPriorityAlerts.length; // Used for UI indicator
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -266,6 +267,9 @@ export function Dashboard() {
           <h1 className="text-2xl font-bold text-zinc-100">Market Intelligence</h1>
           <p className="text-sm text-zinc-500">
             AI-powered insights across your portfolio
+            {alertCount > 0 && (
+              <span className="ml-2 text-amber-400">• {alertCount} high priority alert{alertCount !== 1 ? 's' : ''}</span>
+            )}
             {lastThemeDetectionAt && (
               <span className="ml-2">
                 • Updated {new Date(lastThemeDetectionAt).toLocaleTimeString()}

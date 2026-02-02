@@ -242,7 +242,7 @@ export function useMultipleCompanyData(
 
   // This is a simplified implementation - in production you might want
   // to use a more sophisticated state management approach
-  const [isAnyLoading, setIsAnyLoading] = useState(true);
+  const [isAnyLoading, _setIsAnyLoading] = useState(true); // Reserved for initial loading state
   const [isAnyFetching, setIsAnyFetching] = useState(false);
 
   const fetchAll = useCallback(async (): Promise<Map<string, DataFetchResult>> => {

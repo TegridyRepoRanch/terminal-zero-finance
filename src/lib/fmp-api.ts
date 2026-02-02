@@ -319,6 +319,8 @@ export interface FMPCompanyProfile {
   isActivelyTrading: boolean;
   isAdr: boolean;
   isFund: boolean;
+  // Shares data (may not always be present in profile endpoint)
+  sharesOutstanding?: number;
 }
 
 export interface FMPEarningsTranscript {
@@ -548,6 +550,43 @@ export async function getEnterpriseValue(
 }
 
 // ============================================================================
+// QUOTES & PRICES
+// ============================================================================
+
+export interface FMPQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  changesPercentage: number;
+  change: number;
+  dayLow: number;
+  dayHigh: number;
+  yearHigh: number;
+  yearLow: number;
+  marketCap: number;
+  priceAvg50: number;
+  priceAvg200: number;
+  volume: number;
+  avgVolume: number;
+  exchange: string;
+  open: number;
+  previousClose: number;
+  eps: number;
+  pe: number;
+  sharesOutstanding: number;
+  timestamp: number;
+}
+
+export async function getQuote(ticker: string): Promise<FMPQuote[]> {
+  return fmpRequest<FMPQuote[]>(`/v3/quote/${ticker.toUpperCase()}`);
+}
+
+export async function getQuotes(tickers: string[]): Promise<FMPQuote[]> {
+  const symbols = tickers.map(t => t.toUpperCase()).join(',');
+  return fmpRequest<FMPQuote[]>(`/v3/quote/${symbols}`);
+}
+
+// ============================================================================
 // COMPANY INFO
 // ============================================================================
 
@@ -639,7 +678,7 @@ export async function getInstitutionalHolders(ticker: string): Promise<FMPInstit
 
 export async function getPriceTargets(
   ticker: string,
-  limit: number = 20
+  _limit: number = 20 // Reserved for pagination
 ): Promise<FMPPriceTarget[]> {
   return fmpRequest<FMPPriceTarget[]>(`/v4/price-target?symbol=${ticker.toUpperCase()}`);
 }

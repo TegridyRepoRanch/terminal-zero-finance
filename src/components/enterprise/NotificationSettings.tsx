@@ -5,7 +5,6 @@ import React, { useState, useEffect } from 'react';
 import {
   notificationService,
   type NotificationPreferences,
-  type NotificationChannel,
   type NotificationType,
   type NotificationPriority,
 } from '../../lib/notification-service';

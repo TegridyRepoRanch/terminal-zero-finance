@@ -8,23 +8,17 @@ import {
   TrendingDown,
   AlertTriangle,
   FileText,
-  BarChart3,
   DollarSign,
-  Calendar,
-  ChevronRight,
   RefreshCw,
-  Download,
   ExternalLink,
   MessageSquare,
   Target,
-  Shield,
-  Briefcase,
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react';
 import { useEnterpriseStore } from '../../store/useEnterpriseStore';
 import { earningsAnalyzer, type EarningsAnalysis } from '../../lib/earnings-analyzer';
-import { dcfGenerator, generateDCF, formatDCFSummary, type DCFValuation } from '../../lib/dcf-generator';
+import { generateDCF, formatDCFSummary, type DCFValuation } from '../../lib/dcf-generator';
 import { fetchComprehensiveFMPData, isFMPConfigured } from '../../lib/fmp-api';
 import type { FMPComprehensiveData } from '../../lib/fmp-api';
 

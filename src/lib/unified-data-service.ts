@@ -3,11 +3,11 @@
 // Priority: XBRL > API sources > AI extraction
 
 import { supabase, isSupabaseConfigured } from './supabase';
-import { fetchAllFinnhubData, isFinnhubConfigured, type NormalizedFinancials } from './finnhub-api';
-import { fetchAllAlphaVantageData, isAlphaVantageConfigured, type NormalizedFinancialPeriod } from './alpha-vantage-api';
-import { tryExtractFromXBRL, mergeXBRLWithAI, wrapAIResult, type XBRLExtractionResult } from './xbrl-extractor';
-import { chunkSecFiling, getKeyFinancialSections, type ChunkedFiling, type FilingChunk } from './filing-chunker';
-import type { ExtractedFinancials, LLMExtractionResponse } from './extraction-types';
+import { fetchAllFinnhubData, isFinnhubConfigured } from './finnhub-api';
+import { fetchAllAlphaVantageData, isAlphaVantageConfigured } from './alpha-vantage-api';
+import { type XBRLExtractionResult } from './xbrl-extractor';
+import { chunkSecFiling, getKeyFinancialSections, type FilingChunk } from './filing-chunker';
+import type { ExtractedFinancials } from './extraction-types';
 
 // Data source priority (higher = preferred)
 export const DATA_SOURCE_PRIORITY = {
@@ -543,9 +543,7 @@ export async function storeXBRLMetrics(
     ['freeCashFlow', 'freeCashFlow'],
   ];
 
-  const source: DataSourceType = extraction.source === 'xbrl' ? 'sec_xbrl' : 'sec_ai_extraction';
-  const baseConfidence = source === 'sec_xbrl' ? 95 : 75;
-
+  // Source type determined per-field based on XBRL vs AI extraction
   for (const [fieldName, metricName] of metricMappings) {
     const value = financials[fieldName];
     if (typeof value === 'number' && !isNaN(value)) {
@@ -588,7 +586,7 @@ function getFiscalQuarter(dateStr: string): number {
 export async function smartExtractFromFiling(
   rawHtml: string,
   filingType: '10-K' | '10-Q',
-  missingFields: string[],
+  _missingFields: string[], // Reserved for targeted extraction
   options: Partial<SmartExtractionOptions> = {}
 ): Promise<{
   chunks: FilingChunk[];

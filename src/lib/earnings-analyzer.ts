@@ -240,7 +240,8 @@ Focus on:
 
 Be specific with quotes and provide actionable insights.`;
 
-const THEME_EXTRACTION_PROMPT = `You are analyzing multiple earnings call excerpts to identify cross-company themes and patterns.
+// Theme extraction prompt for cross-company analysis (used by ThemeDetector)
+export const THEME_EXTRACTION_PROMPT_TEMPLATE = `You are analyzing multiple earnings call excerpts to identify cross-company themes and patterns.
 
 Here are excerpts from recent earnings calls mentioning similar topics:
 
@@ -473,6 +474,12 @@ export class EarningsAnalyzer {
     const moreNegative = analyses.filter(a =>
       a.managementTone.comparedToPrior === 'more_negative'
     ).map(a => a.ticker);
+
+    if (morePositive.length >= 2) {
+      insights.push(
+        `Positive tone shift across ${morePositive.join(', ')} - sentiment improving in sector`
+      );
+    }
 
     if (moreNegative.length >= 2) {
       insights.push(

@@ -3,7 +3,10 @@
 
 import React, { useState, useCallback } from 'react';
 import { generateExcelDownload, type ExcelExportConfig } from '../../lib/dcf-excel-export';
-import type { DCFModel } from '../../lib/dcf-generator';
+import type { DCFValuation } from '../../lib/dcf-generator';
+
+// Type alias for component clarity
+type DCFModel = DCFValuation;
 import * as XLSX from 'xlsx';
 
 // ============================================================================

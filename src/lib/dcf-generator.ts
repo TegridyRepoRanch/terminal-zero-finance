@@ -231,7 +231,7 @@ export class DCFGenerator {
       projectedPeriods,
       assumptions,
       balanceSheets[0],
-      profile.shareOutstanding
+      profile.sharesOutstanding || 0
     );
 
     // Generate scenarios
@@ -245,7 +245,7 @@ export class DCFGenerator {
       ticker: data.ticker,
       companyName: profile.companyName,
       currentPrice: profile.price,
-      sharesOutstanding: parseFloat(profile.fullTimeEmployees) || profile.shareOutstanding || 0, // FMP uses string
+      sharesOutstanding: parseFloat(profile.fullTimeEmployees) || profile.sharesOutstanding || 0 || 0, // FMP uses string
       marketCap: profile.mktCap,
       assumptions,
       assumptionNotes: this.generateAssumptionNotes(assumptions, data),
@@ -270,7 +270,7 @@ export class DCFGenerator {
     custom?: Partial<DCFAssumptions>
   ): DCFAssumptions {
     const income = data.incomeStatements.annual;
-    const metrics = data.keyMetrics.annual;
+    // keyMetrics available via data.keyMetrics.annual for advanced assumptions
     const profile = data.profile;
 
     // Calculate historical growth rates
@@ -550,7 +550,7 @@ export class DCFGenerator {
     const equityValue = enterpriseValue - netDebt;
 
     // Per share
-    const sharesOutstanding = profile?.shareOutstanding || 1;
+    const sharesOutstanding = profile?.sharesOutstanding || 1;
     const impliedSharePrice = equityValue / sharesOutstanding / 1000000; // FMP reports shares in millions
     const currentPrice = profile?.price || 0;
     const upsideDownside = currentPrice > 0 ? (impliedSharePrice - currentPrice) / currentPrice : 0;
@@ -580,7 +580,7 @@ export class DCFGenerator {
     sharesOutstanding: number
   ): Pick<DCFValuation, 'waccSensitivity' | 'terminalGrowthSensitivity' | 'sensitivityMatrix'> {
     const lastYearFCF = projections[projections.length - 1].unleveredFCF;
-    const lastYearEBITDA = projections[projections.length - 1].ebitda;
+    // lastYearEBITDA available for EV/EBITDA sensitivity: projections[projections.length - 1].ebitda
     const netDebt = latestBalance?.netDebt || 0;
 
     const waccRange = [-0.02, -0.01, 0, 0.01, 0.02];

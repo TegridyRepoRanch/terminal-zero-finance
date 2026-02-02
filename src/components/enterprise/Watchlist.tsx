@@ -46,7 +46,7 @@ export const Watchlist: React.FC = () => {
   const [showNewWatchlistForm, setShowNewWatchlistForm] = useState(false);
 
   const activeWatchlist = watchlists.find(w => w.id === activeWatchlistId) || watchlists[0];
-  const tickers = activeWatchlist?.tickers || [];
+  const tickers = activeWatchlist?.companies?.map(c => c.ticker) || [];
 
   // Subscribe to SEC alerts
   useEffect(() => {
@@ -201,7 +201,7 @@ export const Watchlist: React.FC = () => {
       }
 
       // Add to watchlist
-      addToWatchlist(activeWatchlist.id, ticker);
+      addToWatchlist(activeWatchlist.id, ticker, profile.companyName || ticker);
       setNewTicker('');
 
       // Subscribe to alerts
@@ -431,7 +431,7 @@ export const Watchlist: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {tickers.map((ticker) => {
+                {tickers.map((ticker: string) => {
                   const item = watchlistItems.get(ticker);
                   const isPositive = (item?.change || 0) >= 0;
 
