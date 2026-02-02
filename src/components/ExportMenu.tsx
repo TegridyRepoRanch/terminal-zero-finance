@@ -286,7 +286,7 @@ export function ExportButtons() {
       });
 
       showToast.success('PDF exported');
-    } catch (error) {
+    } catch {
       showToast.error('Export failed');
     } finally {
       setIsExporting(null);
@@ -317,7 +317,7 @@ export function ExportButtons() {
       });
 
       showToast.success('Excel exported');
-    } catch (error) {
+    } catch {
       showToast.error('Export failed');
     } finally {
       setIsExporting(null);

@@ -147,10 +147,41 @@ interface PrecedentTransactionsProps {
   className?: string;
 }
 
+type SortColumn = 'date' | 'dealValue' | 'evRevenue' | 'premium';
+
+// SortHeader component - moved outside to avoid re-creation during render
+function SortHeader({
+  column,
+  label,
+  sortBy,
+  sortDesc,
+  onSort,
+}: {
+  column: SortColumn;
+  label: string;
+  sortBy: SortColumn;
+  sortDesc: boolean;
+  onSort: (column: SortColumn) => void;
+}) {
+  return (
+    <th
+      className="px-3 py-2 text-right text-zinc-500 font-semibold cursor-pointer hover:text-zinc-300 transition-colors"
+      onClick={() => onSort(column)}
+    >
+      <span className="flex items-center justify-end gap-1">
+        {label}
+        {sortBy === column && (
+          <span className="text-cyan-400">{sortDesc ? '↓' : '↑'}</span>
+        )}
+      </span>
+    </th>
+  );
+}
+
 export function PrecedentTransactions({ className }: PrecedentTransactionsProps) {
   const { incomeStatement } = useFinanceStore();
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<'date' | 'dealValue' | 'evRevenue' | 'premium'>('date');
+  const [sortBy, setSortBy] = useState<SortColumn>('date');
   const [sortDesc, setSortDesc] = useState(true);
 
   // Filter and sort transactions
@@ -253,20 +284,6 @@ export function PrecedentTransactions({ className }: PrecedentTransactionsProps)
     }
   };
 
-  const SortHeader = ({ column, label }: { column: typeof sortBy; label: string }) => (
-    <th
-      className="px-3 py-2 text-right text-zinc-500 font-semibold cursor-pointer hover:text-zinc-300 transition-colors"
-      onClick={() => handleSort(column)}
-    >
-      <span className="flex items-center justify-end gap-1">
-        {label}
-        {sortBy === column && (
-          <span className="text-cyan-400">{sortDesc ? '↓' : '↑'}</span>
-        )}
-      </span>
-    </th>
-  );
-
   return (
     <div className={cn('bg-zinc-900/50 rounded-lg border border-zinc-800', className)}>
       {/* Header */}
@@ -341,14 +358,14 @@ export function PrecedentTransactions({ className }: PrecedentTransactionsProps)
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-zinc-900">
             <tr className="border-b border-zinc-800">
-              <SortHeader column="date" label="Date" />
+              <SortHeader column="date" label="Date" sortBy={sortBy} sortDesc={sortDesc} onSort={handleSort} />
               <th className="px-3 py-2 text-left text-zinc-500 font-semibold">Target</th>
               <th className="px-3 py-2 text-left text-zinc-500 font-semibold">Acquirer</th>
               <th className="px-3 py-2 text-left text-zinc-500 font-semibold">Sector</th>
-              <SortHeader column="dealValue" label="Deal ($B)" />
-              <SortHeader column="evRevenue" label="EV/Rev" />
+              <SortHeader column="dealValue" label="Deal ($B)" sortBy={sortBy} sortDesc={sortDesc} onSort={handleSort} />
+              <SortHeader column="evRevenue" label="EV/Rev" sortBy={sortBy} sortDesc={sortDesc} onSort={handleSort} />
               <th className="px-3 py-2 text-right text-zinc-500 font-semibold">EV/EBITDA</th>
-              <SortHeader column="premium" label="Premium" />
+              <SortHeader column="premium" label="Premium" sortBy={sortBy} sortDesc={sortDesc} onSort={handleSort} />
             </tr>
           </thead>
           <tbody>

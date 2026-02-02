@@ -55,7 +55,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                     setSuccess('Password reset email sent!');
                 }
             }
-        } catch (err) {
+        } catch {
             setError('An unexpected error occurred');
         } finally {
             setLoading(false);
@@ -74,7 +74,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             if (error) {
                 setError(error.message);
             }
-        } catch (err) {
+        } catch {
             setError('An unexpected error occurred');
         } finally {
             setLoading(false);

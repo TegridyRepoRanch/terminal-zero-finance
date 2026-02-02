@@ -401,6 +401,7 @@ export function CalculationErrorBoundary({
  */
 export function AsyncBoundary({
   children,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   loadingFallback: _loadingFallback,
   errorFallback,
 }: {
@@ -425,6 +426,7 @@ export function AsyncBoundary({
  * Hook to manually throw errors within error boundaries
  * Useful for async errors that can't be caught by componentDidCatch
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useErrorHandler() {
   return (error: Error) => {
     throw error;

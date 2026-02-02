@@ -136,7 +136,7 @@ interface FinanceState {
     valuation: ValuationResult;
 
     // Current view
-    activeTab: 'income' | 'balance' | 'cashflow' | 'depreciation' | 'debt' | 'valuation' | 'dd';
+    activeTab: 'income' | 'balance' | 'cashflow' | 'depreciation' | 'debt' | 'valuation' | 'dd' | 'dashboard' | 'watchlist' | 'company' | 'settings';
 
     // Data source tracking
     dataSource: DataSource;
@@ -190,7 +190,7 @@ function recalculate(assumptions: Assumptions) {
 }
 
 function generateId(): string {
-    return `scenario_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `scenario_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
 const defaultScenarios = createDefaultScenarios();
@@ -307,7 +307,8 @@ export const useFinanceStore = create<FinanceState>()(
                     return;
                 }
 
-                const { [scenarioId]: _, ...remaining } = state.scenarios;
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { [scenarioId]: _deleted, ...remaining } = state.scenarios;
 
                 // If deleting active scenario, switch to base
                 const newActiveId = state.activeScenarioId === scenarioId ? 'base' : state.activeScenarioId;

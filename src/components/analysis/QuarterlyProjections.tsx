@@ -47,6 +47,35 @@ interface QuarterlyProjectionsProps {
   className?: string;
 }
 
+// Custom tooltip component - moved outside to avoid re-creation during render
+function QuarterlyTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: QuarterlyDataPoint }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0]?.payload;
+  if (!data) return null;
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 shadow-lg">
+      <p className="text-sm font-semibold text-zinc-100 mb-1">{label}</p>
+      <div className="text-xs space-y-1">
+        <p className="text-zinc-400">
+          Revenue: <span className="text-emerald-400">${(data.revenue / 1e9).toFixed(2)}B</span>
+        </p>
+        <p className="text-zinc-400">
+          YoY Growth: <span className={data.revenueGrowth >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+            {data.revenueGrowth >= 0 ? '+' : ''}{data.revenueGrowth.toFixed(1)}%
+          </span>
+        </p>
+        <p className="text-zinc-400">
+          Net Margin: <span className="text-cyan-400">{data.netMargin.toFixed(1)}%</span>
+        </p>
+        <p className="text-zinc-400">
+          EPS: <span className="text-purple-400">${data.eps.toFixed(2)}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function QuarterlyProjections({ className }: QuarterlyProjectionsProps) {
   const { assumptions, incomeStatement, company } = useFinanceStore();
   const [showSettings, setShowSettings] = useState(false);
@@ -136,32 +165,6 @@ export function QuarterlyProjections({ className }: QuarterlyProjectionsProps) {
     };
   }, [quarterlyData]);
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-    const data = payload[0]?.payload as QuarterlyDataPoint;
-
-    return (
-      <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 shadow-lg">
-        <p className="text-sm font-semibold text-zinc-100 mb-1">{label}</p>
-        <div className="text-xs space-y-1">
-          <p className="text-zinc-400">
-            Revenue: <span className="text-emerald-400">${(data.revenue / 1e9).toFixed(2)}B</span>
-          </p>
-          <p className="text-zinc-400">
-            YoY Growth: <span className={data.revenueGrowth >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-              {data.revenueGrowth >= 0 ? '+' : ''}{data.revenueGrowth.toFixed(1)}%
-            </span>
-          </p>
-          <p className="text-zinc-400">
-            Net Margin: <span className="text-cyan-400">{data.netMargin.toFixed(1)}%</span>
-          </p>
-          <p className="text-zinc-400">
-            EPS: <span className="text-purple-400">${data.eps.toFixed(2)}</span>
-          </p>
-        </div>
-      </div>
-    );
-  };
 
   const updateSeasonality = (qIdx: number, value: number) => {
     const newSeasonality = [...seasonality];
@@ -272,7 +275,7 @@ export function QuarterlyProjections({ className }: QuarterlyProjectionsProps) {
               tick={{ fill: '#a1a1aa', fontSize: 10 }}
               tickFormatter={(v) => `${v.toFixed(0)}%`}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<QuarterlyTooltip />} />
             <Legend />
             <Bar yAxisId="left" dataKey="revenue" name="Revenue" fill="#34d399" radius={[4, 4, 0, 0]} />
             <Line
@@ -306,7 +309,7 @@ export function QuarterlyProjections({ className }: QuarterlyProjectionsProps) {
             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
             <XAxis dataKey="quarter" tick={{ fill: '#a1a1aa', fontSize: 10 }} />
             <YAxis tick={{ fill: '#a1a1aa', fontSize: 10 }} tickFormatter={(v) => `$${(v / 1e9).toFixed(0)}B`} />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<QuarterlyTooltip />} />
             <Legend />
             <Area
               type="monotone"

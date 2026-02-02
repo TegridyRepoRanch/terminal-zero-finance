@@ -12,6 +12,9 @@ import {
   deleteConversation,
 } from '../lib/dd-client';
 import { useFinanceStore } from './useFinanceStore';
+import { embedQuery } from '../lib/embedding-service';
+import { searchSimilarChunks, type ChunkSearchResult } from '../lib/supabase';
+import { getCachedExtraction } from '../lib/supabase-client';
 
 // Chat mode types
 export type ChatMode = 'both' | 'claude-only' | 'gemini-only' | 'ai-to-ai';
@@ -70,7 +73,7 @@ interface DDState {
 
 // Generate unique IDs
 function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
 export const useDDStore = create<DDState>((set, get) => ({
@@ -152,7 +155,47 @@ export const useDDStore = create<DDState>((set, get) => ({
 
     // Sync context before sending
     get().syncContext();
-    const context = get().context;
+    let context = get().context;
+
+    // RAG: Search for relevant document chunks
+    if (context.ticker) {
+      try {
+        // Get the extraction ID for this ticker
+        const cached = await getCachedExtraction(context.ticker);
+        if (cached?.id) {
+          // Generate embedding for the user's question
+          const queryEmbedding = await embedQuery(content);
+
+          // Search for similar chunks
+          const relevantChunks: ChunkSearchResult[] = await searchSimilarChunks(
+            queryEmbedding,
+            cached.id,
+            5, // Top 5 chunks
+            0.4 // Lower threshold for better recall
+          );
+
+          if (relevantChunks.length > 0) {
+            console.log(`[DD] Found ${relevantChunks.length} relevant chunks for RAG`);
+
+            // Add relevant document sections to context
+            const ragContext = relevantChunks.map(chunk => ({
+              section: chunk.section_name,
+              title: chunk.section_title,
+              content: chunk.content,
+              similarity: chunk.similarity,
+            }));
+
+            context = {
+              ...context,
+              relevantDocumentSections: ragContext,
+            } as ChatContext;
+          }
+        }
+      } catch (ragError) {
+        console.warn('[DD] RAG context retrieval failed:', ragError);
+        // Continue without RAG context
+      }
+    }
 
     // Stream to Claude
     if (target === 'claude' || target === 'both') {
@@ -318,6 +361,7 @@ export const useDDStore = create<DDState>((set, get) => ({
           set({ isGeminiStreaming: true, geminiStreamingContent: '' });
         }
       },
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       (model: 'claude' | 'gemini', _turnNumber: number) => {
         // Turn ended - save the message
         const state = get();

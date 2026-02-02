@@ -44,8 +44,8 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
       const fetchFn = type === '10-K' ? fetchLatest10K : fetchLatest10Q;
       const result = await fetchFn(ticker, (msg) => setFetchProgress(msg));
 
-      // Truncate text for LLM processing
-      const truncatedText = truncateForLLM(result.text, 120000);
+      // Truncate text for LLM processing - 60K limit for faster extraction within Vercel timeout
+      const truncatedText = truncateForLLM(result.text, 60000);
 
       // Store the SEC filing data (including raw HTML for XBRL parsing)
       setSecFilingData({
@@ -285,7 +285,7 @@ export function UploadScreen({ onFileSelected, onSkip }: UploadScreenProps) {
       <footer className="px-6 py-4 border-t border-zinc-800">
         <div className="max-w-4xl mx-auto flex items-center justify-between text-xs text-zinc-600">
           <span>Terminal Zero v1.0</span>
-          <span>Powered by Gemini 3, Claude Opus & SEC EDGAR</span>
+          <span>Powered by Gemini 2.0/1.5, Claude Opus & SEC EDGAR</span>
         </div>
       </footer>
     </div>

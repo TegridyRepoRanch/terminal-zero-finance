@@ -8,10 +8,15 @@ import {
     Building,
     Landmark,
     Target,
-    MessageSquare
+    MessageSquare,
+    LayoutDashboard,
+    ListChecks,
+    TrendingUp,
+    Settings
 } from 'lucide-react';
 
-const tabs = [
+// Core financial model tabs
+const modelTabs = [
     { id: 'valuation', label: 'Valuation', shortLabel: 'Val', icon: Target, shortcut: '1' },
     { id: 'income', label: 'Income', shortLabel: 'Inc', icon: FileText, shortcut: '2' },
     { id: 'balance', label: 'Balance', shortLabel: 'Bal', icon: Scale, shortcut: '3' },
@@ -20,6 +25,16 @@ const tabs = [
     { id: 'debt', label: 'Debt', shortLabel: 'Debt', icon: Landmark, shortcut: '6' },
     { id: 'dd', label: 'DD Chat', shortLabel: 'DD', icon: MessageSquare, shortcut: '7' },
 ] as const;
+
+// Enterprise intelligence tabs
+const enterpriseTabs = [
+    { id: 'dashboard', label: 'Dashboard', shortLabel: 'Dash', icon: LayoutDashboard, shortcut: '8' },
+    { id: 'watchlist', label: 'Watchlist', shortLabel: 'Watch', icon: ListChecks, shortcut: '9' },
+    { id: 'company', label: 'Deep Dive', shortLabel: 'DD', icon: TrendingUp, shortcut: '0' },
+    { id: 'settings', label: 'Settings', shortLabel: 'Set', icon: Settings, shortcut: '-' },
+] as const;
+
+const tabs = [...modelTabs, ...enterpriseTabs] as const;
 
 export function TabNav() {
     const { activeTab, setActiveTab } = useFinanceStore();

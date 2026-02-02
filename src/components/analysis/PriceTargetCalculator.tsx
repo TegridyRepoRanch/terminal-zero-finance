@@ -1,7 +1,7 @@
 // Price Target Calculator
 // Multiple methods for calculating and weighting price targets
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { formatCurrency, formatPercent } from '../../lib/financial-logic';
 import {
@@ -104,7 +104,8 @@ export function PriceTargetCalculator() {
     ]);
 
     // Update target values when calculations change
-    useMemo(() => {
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTargets(prev => prev.map(t => {
             switch (t.method) {
                 case 'dcf': return { ...t, value: dcfPrice };

@@ -159,10 +159,12 @@ export function DraggableTabs({
 // Storage key for persisting tab order
 const TAB_ORDER_KEY = 'terminal-zero-tab-order';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function saveTabOrder(tabs: Tab[]) {
   localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(tabs.map((t) => t.id)));
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function loadTabOrder(defaultTabs: Tab[]): Tab[] {
   const stored = localStorage.getItem(TAB_ORDER_KEY);
   if (!stored) return defaultTabs;

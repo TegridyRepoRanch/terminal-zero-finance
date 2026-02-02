@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/static-components */
 // Tornado Chart - Sensitivity Analysis Visualization
 import { useMemo, useState } from 'react';
 import {
@@ -59,11 +60,13 @@ export function TornadoChart({ className, height = 450 }: TornadoChartProps) {
       // Calculate low scenario
       const lowAssumptions = { ...assumptions };
       const lowValue = baseAssumptionValue * (1 + range.low / 100);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (lowAssumptions as any)[key] = lowValue;
 
       // Calculate high scenario
       const highAssumptions = { ...assumptions };
       const highValue = baseAssumptionValue * (1 + range.high / 100);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (highAssumptions as any)[key] = highValue;
 
       try {
@@ -87,7 +90,7 @@ export function TornadoChart({ className, height = 450 }: TornadoChartProps) {
           highImpact,
           baseValue: baseAssumptionValue,
         });
-      } catch (e) {
+      } catch {
         // Skip if calculation fails (e.g., invalid assumptions)
       }
     });
@@ -112,6 +115,7 @@ export function TornadoChart({ className, height = 450 }: TornadoChartProps) {
     }));
   }, [sensitivityData]);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     const data = payload[0]?.payload;

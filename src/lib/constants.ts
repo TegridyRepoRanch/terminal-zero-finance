@@ -6,8 +6,8 @@
 // =============================================================================
 
 export const GEMINI_MODELS = {
-  PRO: 'gemini-3-pro-preview',
-  FLASH: 'gemini-3-flash-preview',
+  PRO: 'gemini-1.5-pro',
+  FLASH: 'gemini-2.0-flash',
 } as const;
 
 export const ANTHROPIC_MODELS = {

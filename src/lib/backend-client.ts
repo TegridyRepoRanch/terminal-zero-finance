@@ -121,7 +121,7 @@ export async function extractFinancialsWithBackend(
   onProgress?: (message: string) => void,
   useFlash: boolean = false
 ): Promise<LLMExtractionResponse> {
-  const modelName = useFlash ? 'Gemini 3 Flash' : 'Gemini 3 Pro';
+  const modelName = useFlash ? 'Gemini 2.0 Flash' : 'Gemini 1.5 Pro';
   onProgress?.(`Extracting financials with ${modelName}...`);
 
   return apiRequest<LLMExtractionResponse>('financials', {
@@ -141,7 +141,7 @@ export async function extractFinancialsFromPDFWithBackend(
   onProgress?: (message: string) => void,
   useFlash: boolean = false
 ): Promise<LLMExtractionResponse> {
-  const modelName = useFlash ? 'Gemini 3 Flash' : 'Gemini 3 Pro';
+  const modelName = useFlash ? 'Gemini 2.0 Flash' : 'Gemini 1.5 Pro';
   onProgress?.(`Analyzing PDF with ${modelName}...`);
 
   return apiRequest<LLMExtractionResponse>('financials/pdf', {
@@ -159,7 +159,7 @@ export async function extractSegmentsWithBackend(
   prompt: string,
   onProgress?: (message: string) => void
 ): Promise<SegmentAnalysis> {
-  onProgress?.('Analyzing business segments with Gemini 3 Pro...');
+  onProgress?.('Analyzing business segments with Gemini 1.5 Pro...');
 
   return apiRequest<SegmentAnalysis>('segments', {
     text,
@@ -175,7 +175,7 @@ export async function analyzeMDAWithBackend(
   prompt: string,
   onProgress?: (message: string) => void
 ): Promise<MDAanalysis> {
-  onProgress?.('Analyzing MD&A section with Gemini 3 Pro...');
+  onProgress?.('Analyzing MD&A section with Gemini 1.5 Pro...');
 
   return apiRequest<MDAanalysis>('mda', {
     text,
@@ -191,7 +191,7 @@ export async function extractTablesWithBackend(
   prompt: string,
   onProgress?: (message: string) => void
 ): Promise<LLMExtractionResponse> {
-  onProgress?.('Extracting complex tables with Gemini 3 Pro...');
+  onProgress?.('Extracting complex tables with Gemini 1.5 Pro...');
 
   return apiRequest<LLMExtractionResponse>('tables', {
     text,
@@ -206,7 +206,7 @@ export async function validateExtractionWithBackend(
   validationPrompt: string,
   onProgress?: (message: string) => void
 ): Promise<ValidationResult> {
-  onProgress?.('Running validation pass with Gemini 3 Pro...');
+  onProgress?.('Running validation pass with Gemini 1.5 Pro...');
 
   return apiRequest<ValidationResult>('validate', {
     validationPrompt,

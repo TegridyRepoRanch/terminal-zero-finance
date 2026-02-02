@@ -14,6 +14,16 @@ import { FINANCIAL_EXTRACTION_PROMPT } from '../../lib/prompts';
 import { tryExtractFromXBRL, mergeXBRLWithAI, type XBRLExtractionResult } from '../../lib/xbrl-extractor';
 import type { ExtractionMetadata, ExtractionWarning, LLMExtractionResponse, ExtractionSource } from '../../lib/extraction-types';
 import { getCachedExtraction, cacheExtraction, deleteCachedExtraction, isSupabaseConfigured } from '../../lib/supabase-client';
+import { chunkSecFiling } from '../../lib/filing-chunker';
+import { embedFilingChunks } from '../../lib/embedding-service';
+ 
+import { storeFilingChunks, storeFilingText, storeVerificationResults, isSupabaseConfigured as supabaseClientConfigured } from '../../lib/supabase';
+
+// Backend URL for verification API
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ||
+  (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+    ? 'https://server-self-eight.vercel.app'
+    : 'http://localhost:3001');
 
 interface ProcessingScreenProps {
   onComplete: () => void;
@@ -35,6 +45,7 @@ const STEPS: ProcessingStep[] = [
   { id: 'pro', label: 'AI extraction pass 2 (Gemini Pro)', status: 'pending', icon: 'pro' },
   { id: 'claude', label: 'AI extraction pass 3 (Claude Opus)', status: 'pending', icon: 'claude' },
   { id: 'review', label: 'Final validation', status: 'pending', icon: 'review' },
+  { id: 'rag', label: 'Preparing document for Q&A', status: 'pending', icon: 'xbrl' },
   { id: 'map', label: 'Processing results', status: 'pending', icon: 'map' },
 ];
 
@@ -434,8 +445,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         // Step 2: Gemini Flash extraction (fast first pass)
         console.log('[Processing] Step 2: Gemini Flash extraction...');
         updateStep('flash', 'active');
-        setStatus('extracting', 'Gemini 3 Flash (pass 1)...');
-        setCurrentStepMessage('Running extraction pass 1 with Gemini 3 Flash (fast)...');
+        setStatus('extracting', 'Gemini 2.0 Flash (pass 1)...');
+        setCurrentStepMessage('Running extraction pass 1 with Gemini 2.0 Flash (fast)...');
 
         try {
           if (useBackend) {
@@ -482,8 +493,8 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
         // Step 3: Gemini Pro extraction (more accurate)
         console.log('[Processing] Step 3: Gemini Pro extraction...');
         updateStep('pro', 'active');
-        setStatus('extracting', 'Gemini 3 Pro (pass 2)...');
-        setCurrentStepMessage('Running extraction pass 2 with Gemini 3 Pro (accurate)...');
+        setStatus('extracting', 'Gemini 1.5 Pro (pass 2)...');
+        setCurrentStepMessage('Running extraction pass 2 with Gemini 1.5 Pro (accurate)...');
 
         try {
           if (useBackend) {
@@ -657,7 +668,144 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
 
         if (cancelled) return;
 
-        // Step 3: Map to assumptions
+        // Step: RAG Processing - Chunk and embed document for Q&A
+        updateStep('rag', 'active');
+        setStatus('extracting', 'Preparing document for Q&A...');
+        setCurrentStepMessage('Chunking document into sections...');
+
+        // Variables to store RAG data for later persistence
+        type ChunkData = {
+          chunkIndex: number;
+          sectionName: string;
+          sectionTitle: string;
+          content: string;
+          embedding: number[];
+          startPosition: number;
+          endPosition: number;
+        };
+        type VerificationData = {
+          verified: boolean;
+          checks: Array<{ name: string; passed: boolean; note?: string }>;
+          anomalies: Array<{ field: string; issue: string; severity: string }>;
+          notes: string[];
+        };
+        let pendingChunks: ChunkData[] = [];
+        let pendingFilingText: string = '';
+        let pendingVerification: VerificationData | null = null;
+
+        // Only do RAG processing for SEC filings with text
+        if (secFilingData && supabaseClientConfigured) {
+          try {
+            // Chunk the document by SEC sections
+            const filingType = secFilingData.metadata.filingType === '10-K' || secFilingData.metadata.filingType === '10-Q'
+              ? secFilingData.metadata.filingType
+              : '10-K';
+
+            const chunkedFiling = chunkSecFiling(documentText, filingType);
+            console.log(`[Processing] Created ${chunkedFiling.chunks.length} chunks from ${chunkedFiling.sectionCount} sections`);
+
+            setCurrentStepMessage(`Generating embeddings for ${chunkedFiling.chunks.length} chunks...`);
+
+            // Generate embeddings for chunks
+            const embeddingResult = await embedFilingChunks(
+              chunkedFiling.chunks,
+              (msg, current, total) => {
+                setCurrentStepMessage(`${msg} (${current}/${total})`);
+              }
+            );
+
+            console.log(`[Processing] Generated embeddings: ${embeddingResult.embeddedChunks.length} success, ${embeddingResult.failedChunks} failed`);
+
+            // Run AI verification on the extracted data
+            if (finalFinancials && embeddingResult.embeddedChunks.length > 0) {
+              setCurrentStepMessage('Running AI verification...');
+
+              // Get key sections for verification context
+              const keyChunks = embeddingResult.embeddedChunks
+                .filter(chunk =>
+                  chunk.sectionName.includes('Item 7') ||
+                  chunk.sectionName.includes('Item 8') ||
+                  chunk.sectionName.includes('Item 1A')
+                )
+                .slice(0, 5)
+                .map(chunk => chunk.content);
+
+              if (keyChunks.length > 0) {
+                try {
+                  const verifyResponse = await fetch(`${BACKEND_URL}/api/embeddings/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      extractedData: finalFinancials,
+                      relevantChunks: keyChunks,
+                    }),
+                  });
+
+                  if (verifyResponse.ok) {
+                    const verifyResult = await verifyResponse.json();
+                    if (verifyResult.status === 'success') {
+                      const verification = verifyResult.data;
+                      console.log(`[Processing] AI verification: ${verification.verified ? 'PASSED' : 'ISSUES FOUND'}`);
+
+                      // Add verification results to extraction notes
+                      finalFinancials.extractionNotes = [
+                        ...(finalFinancials.extractionNotes || []),
+                        `AI Verification: ${verification.verified ? 'Passed' : 'Issues detected'}`,
+                        ...verification.notes,
+                      ];
+
+                      // Add any anomalies as warnings
+                      for (const anomaly of verification.anomalies) {
+                        allWarnings.push({
+                          field: anomaly.field,
+                          message: anomaly.issue,
+                          severity: anomaly.severity as 'low' | 'medium' | 'high',
+                        });
+                      }
+
+                      // Store verification for later use (will be used when RAG storage is implemented)
+                       
+                      pendingVerification = verification;
+                    }
+                  }
+                } catch (verifyError) {
+                  console.warn('[Processing] AI verification failed:', verifyError);
+                  // Non-fatal - continue without verification
+                }
+              }
+            }
+
+            // Store chunks data for later use (after we get extraction ID from cache)
+            // Will be used when RAG storage is fully implemented
+            if (embeddingResult.embeddedChunks.length > 0) {
+               
+              pendingChunks = embeddingResult.embeddedChunks.map(chunk => ({
+                chunkIndex: chunk.chunkIndex,
+                sectionName: chunk.sectionName,
+                sectionTitle: chunk.sectionTitle,
+                content: chunk.content,
+                embedding: chunk.embedding,
+                startPosition: chunk.startPosition,
+                endPosition: chunk.endPosition,
+              }));
+               
+              pendingFilingText = documentText;
+            }
+
+            updateStep('rag', 'complete');
+          } catch (ragError) {
+            console.warn('[Processing] RAG processing failed:', ragError);
+            // Non-fatal - continue without RAG
+            updateStep('rag', 'complete');
+          }
+        } else {
+          console.log('[Processing] Skipping RAG processing (no SEC filing data or Supabase not configured)');
+          updateStep('rag', 'skipped');
+        }
+
+        if (cancelled) return;
+
+        // Step: Map to assumptions
         updateStep('map', 'active');
         setStatus('mapping', 'Processing results...');
         setCurrentStepMessage('Calculating derived metrics...');
@@ -710,10 +858,16 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             ? secFilingData.metadata.filingType
             : '10-K';
 
+          // Capture pending data in closure for async storage
+          const chunksToSave = pendingChunks;
+          const textToSave = pendingFilingText;
+          const verificationToSave = pendingVerification;
+          const accessionNum = secFilingData.metadata.accessionNumber;
+
           cacheExtraction({
             ticker: secFilingData.metadata.ticker,
             filing_type: filingType,
-            accession_number: secFilingData.metadata.accessionNumber,
+            accession_number: accessionNum,
             filing_date: secFilingData.metadata.filingDate,
             company_name: finalFinancials.companyName,
             financials: finalFinancials,
@@ -723,9 +877,35 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
             xbrl_field_count: xbrlFieldCount,
             ai_field_count: aiFieldCount,
             source_url: secFilingData.metadata.url || null,
-          }).then(success => {
+          }).then(async (success) => {
             if (success) {
               console.log('[Processing] Extraction cached successfully');
+
+              // Store RAG data (chunks, filing text, verification)
+              if (chunksToSave.length > 0 || verificationToSave) {
+                try {
+                  const cached = await getCachedExtraction(accessionNum);
+                  if (cached?.id) {
+                    console.log(`[Processing] Storing RAG data for extraction ${cached.id}`);
+
+                    if (textToSave) {
+                      await storeFilingText(cached.id, textToSave);
+                    }
+
+                    if (chunksToSave.length > 0) {
+                      await storeFilingChunks(cached.id, chunksToSave);
+                      console.log(`[Processing] Stored ${chunksToSave.length} chunks for RAG`);
+                    }
+
+                    if (verificationToSave) {
+                      await storeVerificationResults(cached.id, verificationToSave);
+                      console.log('[Processing] Stored AI verification results');
+                    }
+                  }
+                } catch (ragStoreError) {
+                  console.warn('[Processing] Failed to store RAG data:', ragStoreError);
+                }
+              }
             } else {
               console.warn('[Processing] Failed to cache extraction');
             }
@@ -764,6 +944,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       cancelled = true;
       clearTimeout(timeoutId);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]); // Only re-run when file changes - Zustand setters are stable
 
   const getStepIcon = (step: ProcessingStep) => {
@@ -990,7 +1171,7 @@ export function ProcessingScreen({ onComplete, onError, onCancel }: ProcessingSc
       {/* Footer */}
       <footer className="px-6 py-4 border-t border-zinc-800">
         <div className="max-w-4xl mx-auto text-center text-xs text-zinc-600">
-          Powered by Gemini 3 Flash & Pro + Claude Opus
+          Powered by Gemini 2.0 Flash, 1.5 Pro + Claude Opus
         </div>
       </footer>
     </div>

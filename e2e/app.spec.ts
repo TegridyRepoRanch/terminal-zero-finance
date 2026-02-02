@@ -174,8 +174,8 @@ test.describe('Charts', () => {
 
       // Look for tooltip (may or may not appear depending on where we hover)
       // This is a best-effort test
-      const tooltip = page.locator('.recharts-tooltip-wrapper');
-      // Tooltip visibility depends on hover position
+      // Tooltip visibility depends on hover position - locator not used as this is best-effort
+      page.locator('.recharts-tooltip-wrapper');
     }
   });
 });

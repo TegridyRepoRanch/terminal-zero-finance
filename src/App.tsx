@@ -24,6 +24,12 @@ const DebtSchedule = lazy(() => import('./components/DebtSchedule').then(m => ({
 const ValuationEngine = lazy(() => import('./components/ValuationEngine').then(m => ({ default: m.ValuationEngine })));
 const DDChat = lazy(() => import('./components/dd/DDChat'));
 
+// Enterprise intelligence components
+const Dashboard = lazy(() => import('./components/enterprise/Dashboard').then(m => ({ default: m.Dashboard })));
+const Watchlist = lazy(() => import('./components/enterprise/Watchlist').then(m => ({ default: m.Watchlist })));
+const CompanyDeepDive = lazy(() => import('./components/enterprise/CompanyDeepDive').then(m => ({ default: m.CompanyDeepDive })));
+const NotificationSettings = lazy(() => import('./components/enterprise/NotificationSettings').then(m => ({ default: m.NotificationSettings })));
+
 // Lazy load upload flow (includes PDF.js)
 const UploadScreen = lazy(() => import('./components/upload').then(m => ({ default: m.UploadScreen })));
 const ProcessingScreen = lazy(() => import('./components/upload').then(m => ({ default: m.ProcessingScreen })));
@@ -225,6 +231,15 @@ function MainContent() {
         return <ValuationEngine />;
       case 'dd':
         return <DDChat />;
+      // Enterprise Intelligence Tabs
+      case 'dashboard':
+        return <Dashboard />;
+      case 'watchlist':
+        return <Watchlist />;
+      case 'company':
+        return <CompanyDeepDive ticker="AAPL" />;
+      case 'settings':
+        return <NotificationSettings />;
       default:
         return <ValuationEngine />;
     }
@@ -280,25 +295,21 @@ function MainContent() {
 export default function App() {
   const [view, setView] = useState<AppView>('upload');
   const [showConfigBanner, setShowConfigBanner] = useState(true);
-  const [configValidation, setConfigValidation] = useState(() => validateConfig());
+  const [configValidation] = useState(() => validateConfig());
   const { setAssumptionsFromExtraction, refreshStockPrice } = useFinanceStore();
   const { metadata, reset: resetUpload, setForceReextract } = useUploadStore();
 
-  // Validate configuration on mount
+  // Log configuration status on mount
   useEffect(() => {
-    const validation = validateConfig();
-    setConfigValidation(validation);
-
-    // Log configuration status to console
-    if (validation.isValid) {
-      console.log(`✅ Configuration valid - Running in ${validation.mode.toUpperCase()} mode`);
-      if (validation.warnings.length > 0) {
-        console.warn('⚠️ Configuration warnings:', validation.warnings);
+    if (configValidation.isValid) {
+      console.log(`✅ Configuration valid - Running in ${configValidation.mode.toUpperCase()} mode`);
+      if (configValidation.warnings.length > 0) {
+        console.warn('⚠️ Configuration warnings:', configValidation.warnings);
       }
     } else {
-      console.error('❌ Configuration errors:', validation.errors);
+      console.error('❌ Configuration errors:', configValidation.errors);
     }
-  }, []);
+  }, [configValidation]);
 
   // Fetch CSRF token on mount (backend mode only)
   useEffect(() => {

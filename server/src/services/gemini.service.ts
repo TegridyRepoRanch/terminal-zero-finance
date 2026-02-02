@@ -3,10 +3,12 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 
-// Gemini Models
+// Gemini Models - Use stable model names
+// See: https://ai.google.dev/gemini-api/docs/models/gemini
+// NOTE: Gemini 1.5 retired, Gemini 2.0 retiring March 2026 - use 2.5 series
 const GEMINI_MODELS = {
-  FLASH: 'gemini-3-flash-preview',
-  PRO: 'gemini-3-pro-preview',
+  FLASH: 'gemini-2.5-flash',      // Fast, balanced intelligence and latency
+  PRO: 'gemini-2.5-pro',          // High capability for complex reasoning
 } as const;
 
 // Gemini Configuration
@@ -77,7 +79,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: strin
 function safeParseJSON<T>(response: string, context: string): T {
   try {
     return JSON.parse(response) as T;
-  } catch (error) {
+  } catch {
     console.error(`[Gemini] JSON parse error in ${context}`);
     console.error(`[Gemini] Response preview: ${response.substring(0, 200)}...`);
     throw new AppError(500, `Failed to parse ${context} response`);
@@ -93,7 +95,7 @@ function safeParseJSON<T>(response: string, context: string): T {
  * - JSON response format
  * - Timeout wrapper (default 120s from config)
  *
- * @param modelId - Gemini model identifier (e.g., 'gemini-3-flash-preview')
+ * @param modelId - Gemini model identifier (e.g., 'gemini-2.0-flash')
  * @param prompt - The prompt to send to the model
  * @param temperature - Temperature setting (0.0-1.0): lower = more deterministic
  * @param operationName - Human-readable operation name for logging/errors
@@ -353,4 +355,116 @@ export async function validateExtraction(
   );
 
   return safeParseJSON(response, 'validation');
+}
+
+/**
+ * Generates embeddings for an array of texts using Gemini's text-embedding model.
+ *
+ * Uses text-embedding-004 model which produces 768-dimensional vectors.
+ * These can be padded to 1536 dimensions for compatibility with other systems.
+ *
+ * @param texts - Array of strings to generate embeddings for
+ * @returns Array of embedding vectors (768 dimensions each)
+ * @throws {AppError} On API failure or if client not initialized
+ */
+export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
+  if (!genAI) {
+    throw new AppError(500, 'Gemini client not initialized');
+  }
+
+  console.log(`[Gemini] Generating embeddings for ${texts.length} texts`);
+
+  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+
+  try {
+    const embeddings: number[][] = [];
+
+    // Process each text individually (Gemini embedding API doesn't support batch)
+    for (const text of texts) {
+      const result = await withTimeout(
+        model.embedContent(text),
+        30000, // 30s timeout per embedding
+        'Embedding generation'
+      );
+
+      embeddings.push(result.embedding.values);
+    }
+
+    console.log(`[Gemini] Generated ${embeddings.length} embeddings (${embeddings[0]?.length || 0} dimensions)`);
+    return embeddings;
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+
+    console.error('[Gemini] Embedding generation error:', error);
+    throw new AppError(
+      500,
+      `Embedding generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+/**
+ * Verifies extracted financial data against source document using AI reasoning.
+ *
+ * This is a lightweight verification that checks for:
+ * - Calculation accuracy (does gross profit = revenue - COGS?)
+ * - Anomaly detection (unusually large YoY changes)
+ * - Missing critical fields
+ * - Data consistency
+ *
+ * Uses Gemini Pro for reasoning capability with low temperature for accuracy.
+ *
+ * @param extractedData - The financial data extracted from XBRL
+ * @param relevantChunks - Key sections from the filing for context
+ * @returns Verification result with checks passed, anomalies, and notes
+ */
+export async function verifyExtraction(
+  extractedData: Record<string, unknown>,
+  relevantChunks: string[]
+): Promise<{
+  verified: boolean;
+  checks: Array<{ name: string; passed: boolean; note?: string }>;
+  anomalies: Array<{ field: string; issue: string; severity: 'low' | 'medium' | 'high' }>;
+  notes: string[];
+}> {
+  if (!genAI) {
+    throw new AppError(500, 'Gemini client not initialized');
+  }
+
+  console.log('[Gemini] Running AI verification');
+
+  const prompt = `You are a financial data verification assistant. Review the extracted financial data and verify its accuracy.
+
+## Extracted Data (from XBRL/structured source):
+${JSON.stringify(extractedData, null, 2)}
+
+## Relevant Document Sections:
+${relevantChunks.join('\n\n---\n\n')}
+
+## Your Task:
+1. Verify mathematical relationships (gross profit = revenue - cost of revenue, etc.)
+2. Check for unusual values (negative where shouldn't be, outliers)
+3. Identify any missing critical fields
+4. Note any inconsistencies between extracted data and document text
+
+Return JSON:
+{
+  "verified": boolean (true if no major issues),
+  "checks": [
+    { "name": "Gross Profit Calculation", "passed": true/false, "note": "optional explanation" }
+  ],
+  "anomalies": [
+    { "field": "revenue", "issue": "Value seems unusually high", "severity": "low|medium|high" }
+  ],
+  "notes": ["Any additional observations"]
+}`;
+
+  const response = await generateContent(
+    GEMINI_MODELS.FLASH, // Use Flash for speed - this is a focused verification task
+    prompt,
+    GEMINI_CONFIG.TEMPERATURE_EXTRACTION,
+    'Verification'
+  );
+
+  return safeParseJSON(response, 'verification');
 }

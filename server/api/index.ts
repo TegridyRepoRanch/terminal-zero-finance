@@ -13,6 +13,7 @@ import extractionRoutes from '../src/routes/extraction.routes.js';
 import claudeRoutes from '../src/routes/claude.routes.js';
 import secRoutes from '../src/routes/sec.routes.js';
 import chatRoutes from '../src/routes/chat.routes.js';
+import embeddingRoutes from '../src/routes/embedding.routes.js';
 import { initializeGeminiClient } from '../src/services/gemini.service.js';
 import { initializeAnthropicClient } from '../src/services/anthropic.service.js';
 
@@ -83,6 +84,9 @@ app.use('/api/sec', cacheMiddleware, secRoutes);
 
 // DD Chat routes (streaming, no caching)
 app.use('/api/chat', csrfProtection, chatRoutes);
+
+// Embedding routes (for RAG pipeline)
+app.use('/api/embeddings', embeddingRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {

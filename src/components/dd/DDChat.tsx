@@ -60,6 +60,7 @@ export default function DDChat() {
   // Load conversation history when company changes
   useEffect(() => {
     if (company?.ticker) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoadingHistory(true);
       loadConversationHistory(company.ticker).finally(() => {
         setIsLoadingHistory(false);

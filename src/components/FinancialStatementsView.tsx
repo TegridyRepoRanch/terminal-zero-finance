@@ -9,6 +9,7 @@ import { CashFlowStatement } from './CashFlowStatement';
 import { DepreciationSchedule } from './DepreciationSchedule';
 import { DebtSchedule } from './DebtSchedule';
 import { SourceVerificationView } from './SourceVerificationView';
+import { useFinanceStore } from '../store/useFinanceStore';
 import { cn } from '../lib/utils';
 import type { CashFlowRow } from '../lib/financial-logic';
 
@@ -76,7 +77,6 @@ const tabs: TabConfig[] = [
 
 // Simple DCF Summary component
 function DCFSummary() {
-  const { useFinanceStore } = require('../store/useFinanceStore');
   const { valuation, assumptions, cashFlow } = useFinanceStore();
 
   const formatCurrency = (value: number) => {

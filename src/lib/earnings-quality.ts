@@ -370,10 +370,10 @@ export function calculateEarningsQualityFromHistory(
   }
 
   // Calculate average accrual ratio from available data
-  let accrualScore = 60; // Default without OCF data
+  const accrualScore = 60; // Default without OCF data
 
   // Revenue quality from DSO trends would go here
-  let revenueScore = 70;
+  const revenueScore = 70;
 
   // Overall score
   const overallScore = Math.round(

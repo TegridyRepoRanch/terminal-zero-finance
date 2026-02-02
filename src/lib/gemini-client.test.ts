@@ -145,9 +145,9 @@ const mockGenerateContent = vi.fn();
 vi.mock('@google/generative-ai', () => {
   return {
     GoogleGenerativeAI: class MockGoogleGenerativeAI {
-      constructor(_apiKey: string) {
-        // Constructor accepts API key
-      }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      constructor(_apiKey: string) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       getGenerativeModel(_config: { model: string }) {
         return {
           generateContent: mockGenerateContent,

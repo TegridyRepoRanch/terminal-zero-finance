@@ -16,6 +16,12 @@ export interface ChatContext {
   companyName?: string;
   financials?: Record<string, unknown>;
   extractionMetadata?: Record<string, unknown>;
+  relevantDocumentSections?: Array<{
+    section: string;
+    title: string;
+    content: string;
+    similarity: number;
+  }>;
 }
 
 export interface StreamChunk {
@@ -100,6 +106,24 @@ Use this data to answer questions accurately. Reference specific figures when re
   if (context.extractionMetadata) {
     prompt += `\n## Data Source
 ${JSON.stringify(context.extractionMetadata, null, 2)}
+`;
+  }
+
+  // Add relevant document sections from RAG
+  if (context.relevantDocumentSections && context.relevantDocumentSections.length > 0) {
+    prompt += `\n## Relevant SEC Filing Sections
+The following sections from the SEC filing are most relevant to the user's question:
+
+`;
+    for (const section of context.relevantDocumentSections) {
+      prompt += `### ${section.section}: ${section.title} (Relevance: ${Math.round(section.similarity * 100)}%)
+${section.content}
+
+---
+`;
+    }
+    prompt += `
+Use these document sections to provide accurate, source-based answers. Quote specific passages when relevant.
 `;
   }
 
@@ -203,7 +227,8 @@ export async function* streamGeminiChat(
 /**
  * Non-streaming chat for AI-to-AI discussion (needs full response for next turn)
  */
-async function getClaudeResponse(
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _getClaudeResponse(
   messages: ChatMessage[],
   context: ChatContext
 ): Promise<string> {
@@ -226,7 +251,8 @@ async function getClaudeResponse(
   return textBlock && 'text' in textBlock ? textBlock.text : '';
 }
 
-async function getGeminiResponse(
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _getGeminiResponse(
   messages: ChatMessage[],
   context: ChatContext
 ): Promise<string> {

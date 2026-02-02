@@ -12,7 +12,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ||
 
 
 // Check if backend mode is configured
-function useBackend(): boolean {
+function shouldUseBackend(): boolean {
     const mode = getConfigMode();
     console.log('[SEC] Config mode:', mode, 'Backend URL:', BACKEND_URL);
     // Always try backend first in production
@@ -418,11 +418,11 @@ export async function fetchLatest10K(
     ticker: string,
     onProgress?: (message: string) => void
 ): Promise<{ text: string; rawHtml: string; url: string; metadata: SECFiling }> {
-    const shouldUseBackend = useBackend();
+    const backendEnabled = shouldUseBackend();
     console.log('[SEC] fetchLatest10K - useBackend:', shouldUseBackend);
 
     // Use backend if available (has proper User-Agent headers)
-    if (shouldUseBackend) {
+    if (backendEnabled) {
         try {
             console.log('[SEC] Attempting backend fetch...');
             const result = await fetchLatestFilingViaBackend(ticker, '10-K', onProgress);
@@ -580,10 +580,10 @@ export async function fetchHistorical10KsAuto(
     years: number = 5,
     onProgress?: (message: string, current: number, total: number) => void
 ): Promise<Array<{ text: string; rawHtml: string; url: string; metadata: SECFiling }>> {
-    const shouldUseBackend = useBackend();
+    const backendEnabled = shouldUseBackend();
     console.log('[SEC] fetchHistorical10KsAuto - useBackend:', shouldUseBackend);
 
-    if (shouldUseBackend) {
+    if (backendEnabled) {
         try {
             console.log('[SEC] Attempting backend historical fetch...');
             return await fetchHistorical10KsViaBackend(ticker, years, onProgress);
@@ -606,11 +606,11 @@ export async function fetchLatest10Q(
     ticker: string,
     onProgress?: (message: string) => void
 ): Promise<{ text: string; rawHtml: string; url: string; metadata: SECFiling }> {
-    const shouldUseBackend = useBackend();
+    const backendEnabled = shouldUseBackend();
     console.log('[SEC] fetchLatest10Q - useBackend:', shouldUseBackend);
 
     // Use backend if available (has proper User-Agent headers)
-    if (shouldUseBackend) {
+    if (backendEnabled) {
         try {
             console.log('[SEC] Attempting backend fetch...');
             const result = await fetchLatestFilingViaBackend(ticker, '10-Q', onProgress);

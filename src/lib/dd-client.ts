@@ -15,6 +15,12 @@ export interface ChatContext {
   companyName?: string;
   financials?: Record<string, unknown>;
   extractionMetadata?: Record<string, unknown>;
+  relevantDocumentSections?: Array<{
+    section: string;
+    title: string;
+    content: string;
+    similarity: number;
+  }>;
 }
 
 export interface StreamChunk {

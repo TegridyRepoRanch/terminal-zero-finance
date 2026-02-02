@@ -139,13 +139,13 @@ export function HistoricalTrends({ className }: HistoricalTrendsProps) {
     return (Math.pow(last / first, 1 / years) - 1) * 100;
   }, [historicalData]);
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ color: string; name: string; value: number }>; label?: string }) => {
     if (!active || !payload?.length) return null;
 
     return (
       <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 shadow-lg">
         <p className="text-sm font-semibold text-zinc-100 mb-1">{label}</p>
-        {payload.map((entry: any, i: number) => (
+        {payload.map((entry, i: number) => (
           <p key={i} className="text-xs" style={{ color: entry.color }}>
             {entry.name}: {entry.name.includes('Margin') || entry.name.includes('Growth')
               ? `${entry.value.toFixed(1)}%`

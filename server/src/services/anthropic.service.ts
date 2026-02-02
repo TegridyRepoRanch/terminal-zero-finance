@@ -36,21 +36,36 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: strin
 }
 
 /**
- * Safe JSON parse - handles markdown code blocks
+ * Safe JSON parse - handles markdown code blocks and various response formats
  */
 function safeParseJSON<T>(response: string, context: string): T {
-  // Try to extract JSON from markdown code blocks if present
-  let jsonStr = response;
-  const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1].trim();
+  let jsonStr = response.trim();
+
+  // Try 1: Extract from markdown code blocks
+  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    jsonStr = codeBlockMatch[1].trim();
+  }
+
+  // Try 2: Find JSON object/array pattern in response
+  if (!jsonStr.startsWith('{') && !jsonStr.startsWith('[')) {
+    const jsonObjectMatch = jsonStr.match(/(\{[\s\S]*\})/);
+    const jsonArrayMatch = jsonStr.match(/(\[[\s\S]*\])/);
+    if (jsonObjectMatch) {
+      jsonStr = jsonObjectMatch[1];
+    } else if (jsonArrayMatch) {
+      jsonStr = jsonArrayMatch[1];
+    }
   }
 
   try {
     return JSON.parse(jsonStr) as T;
-  } catch (error) {
+  } catch (parseError) {
     console.error(`[Anthropic] JSON parse error in ${context}`);
-    console.error(`[Anthropic] Response preview: ${response.substring(0, 200)}...`);
+    console.error(`[Anthropic] Parse error:`, parseError);
+    console.error(`[Anthropic] Response length: ${response.length}`);
+    console.error(`[Anthropic] Response preview: ${response.substring(0, 500)}...`);
+    console.error(`[Anthropic] Attempted to parse: ${jsonStr.substring(0, 300)}...`);
     throw new AppError(500, `Failed to parse ${context} response`);
   }
 }

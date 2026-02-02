@@ -110,8 +110,8 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: strin
  * Get display name for a model ID
  */
 function getModelDisplayName(modelId: string): string {
-  if (modelId === GEMINI_MODELS.FLASH) return 'Gemini 3 Flash';
-  if (modelId === GEMINI_MODELS.PRO) return 'Gemini 3 Pro';
+  if (modelId === GEMINI_MODELS.FLASH) return 'Gemini 2.0 Flash';
+  if (modelId === GEMINI_MODELS.PRO) return 'Gemini 1.5 Pro';
   return modelId;
 }
 

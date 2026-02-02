@@ -126,6 +126,7 @@ export function ChartColorProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useChartColors() {
   const context = useContext(ChartColorContext);
   if (!context) {

@@ -139,7 +139,7 @@ export function HeatmapChart({ className }: HeatmapChartProps) {
             value,
             percentChange,
           });
-        } catch (e) {
+        } catch {
           row.push({
             x: xi,
             y: yi,

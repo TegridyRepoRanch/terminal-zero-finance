@@ -305,7 +305,7 @@ export function PeerComparison({ className }: PeerComparisonProps) {
                 ].map((row) => {
                   const targetVal = targetMetrics[row.key as keyof PeerMetrics] as number;
                   const peerVals = selectedPeerData.map((p) => p[row.key as keyof PeerMetrics] as number);
-                  const median = peerStats ? (peerStats as any)[row.key]?.median : 0;
+                  const median = peerStats ? (peerStats as Record<string, { median: number }>)[row.key]?.median : 0;
 
                   return (
                     <tr key={row.key} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">

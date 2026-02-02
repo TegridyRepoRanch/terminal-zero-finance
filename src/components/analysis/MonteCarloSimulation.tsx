@@ -47,6 +47,24 @@ interface MonteCarloSimulationProps {
   className?: string;
 }
 
+// Custom tooltip component for the histogram - moved outside to avoid re-creation during render
+function MonteCarloTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: DistributionBin }> }) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0].payload;
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 shadow-lg">
+      <p className="text-sm font-semibold text-zinc-100">{data.range}</p>
+      <p className="text-xs text-zinc-400">
+        Count: <span className="text-emerald-400">{data.count}</span>
+      </p>
+      <p className="text-xs text-zinc-400">
+        Frequency: <span className="text-cyan-400">{(data.frequency * 100).toFixed(1)}%</span>
+      </p>
+    </div>
+  );
+}
+
 export function MonteCarloSimulation({ className }: MonteCarloSimulationProps) {
   const { assumptions, valuation, company } = useFinanceStore();
   const [isRunning, setIsRunning] = useState(false);
@@ -204,22 +222,6 @@ export function MonteCarloSimulation({ className }: MonteCarloSimulationProps) {
     return bins;
   }, [simulations]);
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const data = payload[0].payload as DistributionBin;
-
-    return (
-      <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 shadow-lg">
-        <p className="text-sm font-semibold text-zinc-100">{data.range}</p>
-        <p className="text-xs text-zinc-400">
-          Count: <span className="text-emerald-400">{data.count}</span>
-        </p>
-        <p className="text-xs text-zinc-400">
-          Frequency: <span className="text-cyan-400">{(data.frequency * 100).toFixed(1)}%</span>
-        </p>
-      </div>
-    );
-  };
 
   return (
     <div className={cn('bg-zinc-900/50 rounded-lg border border-zinc-800', className)}>
@@ -332,7 +334,7 @@ export function MonteCarloSimulation({ className }: MonteCarloSimulationProps) {
                   tick={{ fill: '#a1a1aa', fontSize: 10 }}
                   tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
                 />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={<MonteCarloTooltip />} />
                 {marketPrice > 0 && (
                   <ReferenceLine
                     x={marketPrice}

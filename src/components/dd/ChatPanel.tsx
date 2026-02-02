@@ -57,7 +57,7 @@ export function ChatPanel({
               isClaude ? 'text-emerald-400' : 'text-cyan-400'
             )}
           >
-            {isClaude ? 'Claude 4.5 Opus' : 'Gemini 3 Pro'}
+            {isClaude ? 'Claude 4.5 Opus' : 'Gemini 1.5 Pro'}
           </span>
         </div>
 
