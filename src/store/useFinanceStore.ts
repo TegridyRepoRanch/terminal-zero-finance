@@ -652,6 +652,17 @@ export const useFinanceStore = create<FinanceState>()(
                     console.error('[Store] Failed to rehydrate state:', error);
                     return;
                 }
+                // Fix Date objects that were serialized as strings
+                if (state?.scenarios) {
+                    for (const scenario of Object.values(state.scenarios)) {
+                        if (scenario.createdAt && typeof scenario.createdAt === 'string') {
+                            scenario.createdAt = new Date(scenario.createdAt);
+                        }
+                        if (scenario.updatedAt && typeof scenario.updatedAt === 'string') {
+                            scenario.updatedAt = new Date(scenario.updatedAt);
+                        }
+                    }
+                }
                 // Recalculate all values after loading from storage
                 if (state?.scenarios && state?.activeScenarioId) {
                     const activeScenario = state.scenarios[state.activeScenarioId];
